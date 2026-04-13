@@ -73,24 +73,29 @@ export async function getUserWithNumbers(address: string): Promise<UserWithNumbe
   return rows[0] ?? null;
 }
 
+const SIGNUP_ENERGY = 10;
+
 /**
- * Creates a user + their user_numbers row atomically.
- * Throws a postgres error with code '23505' on duplicate address or name.
+ * Creates a user + user_numbers (with initial energy) + energy_issuance record
+ * in a single transaction. Throws postgres error '23505' on duplicate address/name.
  */
 export async function createUser(address: string, name: string): Promise<UserRow> {
-  const userId = generateId();
+  const userId = generateId().toString();
+  const issuanceId = generateId().toString();
   const lowerAddress = address.toLowerCase();
-
-  const id = userId.toString();
 
   await sql.begin(async (tx) => {
     await tx`
       INSERT INTO users (user_id, address, name)
-      VALUES (${id}, ${lowerAddress}, ${name})
+      VALUES (${userId}, ${lowerAddress}, ${name})
     `;
     await tx`
-      INSERT INTO user_numbers (user_id)
-      VALUES (${id})
+      INSERT INTO user_numbers (user_id, energy)
+      VALUES (${userId}, ${SIGNUP_ENERGY})
+    `;
+    await tx`
+      INSERT INTO energy_issuance (energy_issuance_id, user_id, issuance_type, amount)
+      VALUES (${issuanceId}, ${userId}, 'signup', ${SIGNUP_ENERGY})
     `;
   });
 
