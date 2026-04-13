@@ -4,6 +4,7 @@ import config from '../config.ts';
 import { authRoutes } from './routes/auth.ts';
 import { gameRoutes } from './routes/game.ts';
 import { checkUserRoute, userRoutes } from './routes/user.ts';
+import { purchaseRoutes } from './routes/purchase.ts';
 
 const app = new Hono()
   .get('/', (c) => c.json({ message: 'Hello from Blockfall!' }))
@@ -11,7 +12,8 @@ const app = new Hono()
   .route('/auth', authRoutes)
   .route('/user', userRoutes)
   .route('/checkuser', checkUserRoute)
-  .route('/game', gameRoutes);
+  .route('/game', gameRoutes)
+  .route('/purchase', purchaseRoutes);
 
 // Export the app type for use with hono/client on the frontend:
 //   import { hc } from 'hono/client'

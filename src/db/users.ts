@@ -16,7 +16,9 @@ export type UserRow = {
 export type UserWithNumbersRow = UserRow & {
   best_score: number;
   last_score: number;
+  games_played: number;
   total_score: string; // BIGINT → string
+  today_score: number;
   energy: number;
 };
 
@@ -62,15 +64,46 @@ export async function getUserWithNumbers(address: string): Promise<UserWithNumbe
       u.name,
       u.created_at,
       u.updated_at,
-      COALESCE(un.best_score,  0)   AS best_score,
-      COALESCE(un.last_score,  0)   AS last_score,
-      COALESCE(un.total_score, 0)   AS total_score,
-      COALESCE(un.energy,      0)   AS energy
+      COALESCE(un.best_score,    0) AS best_score,
+      COALESCE(un.last_score,    0) AS last_score,
+      COALESCE(un.games_played,  0) AS games_played,
+      COALESCE(un.total_score,   0) AS total_score,
+      COALESCE(ts.today_score,   0) AS today_score,
+      COALESCE(un.energy,        0) AS energy
     FROM   users        u
     LEFT JOIN user_numbers un ON un.user_id = u.user_id
+    LEFT JOIN LATERAL (
+      SELECT COALESCE(SUM(gp.score), 0)::int AS today_score
+      FROM   game_plays gp
+      JOIN   daily_tournaments dt ON dt.daily_tournament_id = gp.day_id
+      WHERE  gp.user_id = u.user_id
+        AND  dt.tournament_date = CURRENT_DATE
+        AND  gp.score IS NOT NULL
+    ) ts ON true
     WHERE  u.address = ${address.toLowerCase()}
   `;
   return rows[0] ?? null;
+}
+
+// ---------------------------------------------------------------------------
+// Inventory
+// ---------------------------------------------------------------------------
+
+export type UserItemRow = {
+  item_id: string;
+  item_type: number;
+  acquisition_type: string;
+  buy_date: Date | null;
+};
+
+export async function getUserInventory(userId: string): Promise<UserItemRow[]> {
+  return sql<UserItemRow[]>`
+    SELECT item_id, item_type, acquisition_type, buy_date
+    FROM   user_items
+    WHERE  user_id = ${userId}
+      AND  usage_date IS NULL
+    ORDER BY buy_date DESC
+  `;
 }
 
 const SIGNUP_ENERGY = 10;

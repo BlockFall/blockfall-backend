@@ -13,12 +13,13 @@ CREATE TABLE users (
 
 -- Per-user stats (high-churn row → HOT-update friendly)
 CREATE TABLE user_numbers (
-    user_id     BIGINT  PRIMARY KEY REFERENCES users(user_id),
-    best_score  INT     NOT NULL DEFAULT 0 CHECK (best_score  >= 0),
-    last_score  INT     NOT NULL DEFAULT 0 CHECK (last_score  >= 0),
-    total_score BIGINT  NOT NULL DEFAULT 0 CHECK (total_score >= 0),
-    energy      INT     NOT NULL DEFAULT 0 CHECK (energy      >= 0),
-    updated_at  TIMESTAMPTZ
+    user_id      BIGINT  PRIMARY KEY REFERENCES users(user_id),
+    best_score   INT     NOT NULL DEFAULT 0 CHECK (best_score  >= 0),
+    last_score   INT     NOT NULL DEFAULT 0 CHECK (last_score  >= 0),
+    games_played INT     NOT NULL DEFAULT 0 CHECK (games_played >= 0),
+    energy       INT     NOT NULL DEFAULT 0 CHECK (energy      >= 0),
+    total_score  BIGINT  NOT NULL DEFAULT 0 CHECK (total_score >= 0),
+    updated_at   TIMESTAMPTZ
 ) WITH (fillfactor = 80);
 
 -- Daily tournaments
