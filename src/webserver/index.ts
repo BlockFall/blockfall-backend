@@ -1,10 +1,15 @@
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import config from '../config.ts';
+import { authRoutes } from './routes/auth.ts';
+import { checkUserRoute, userRoutes } from './routes/user.ts';
 
 const app = new Hono()
   .get('/', (c) => c.json({ message: 'Hello from Blockfall!' }))
-  .get('/health', (c) => c.json({ status: 'ok' as const }));
+  .get('/health', (c) => c.json({ status: 'ok' as const }))
+  .route('/auth', authRoutes)
+  .route('/user', userRoutes)
+  .route('/checkuser', checkUserRoute);
 
 // Export the app type for use with hono/client on the frontend:
 //   import { hc } from 'hono/client'

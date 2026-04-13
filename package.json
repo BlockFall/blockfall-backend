@@ -10,6 +10,7 @@
     "dev": "node --watch --watch-path=src --experimental-strip-types src/index.ts",
     "start": "node src/index.ts",
     "typecheck": "tsc --noEmit",
+    "types:build": "tsc -p tsconfig.types.json",
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
     "format": "prettier --write \"src/**/*.ts\"",
@@ -32,8 +33,11 @@
     "@hono/node-server": "^1.19.13",
     "dotenv": "^17.4.1",
     "hono": "^4.12.12",
+    "jose": "^6.2.2",
     "layered-loader": "^14.3.0",
     "p-limit": "^7.3.0",
+    "postgres": "^3.4.9",
+    "siwe": "^3.0.0",
     "zod": "^4.3.6"
   }
 }

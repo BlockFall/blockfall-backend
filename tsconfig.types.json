@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "outDir": "dist/types",
+    "declarationMap": true
+  },
+  // Only emit the public surface — the webserver entry point
+  "include": ["src/webserver/index.ts"]
+}
