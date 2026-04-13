@@ -2,6 +2,7 @@ import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import config from '../config.ts';
 import { authRoutes } from './routes/auth.ts';
+import { gameRoutes } from './routes/game.ts';
 import { checkUserRoute, userRoutes } from './routes/user.ts';
 
 const app = new Hono()
@@ -9,7 +10,8 @@ const app = new Hono()
   .get('/health', (c) => c.json({ status: 'ok' as const }))
   .route('/auth', authRoutes)
   .route('/user', userRoutes)
-  .route('/checkuser', checkUserRoute);
+  .route('/checkuser', checkUserRoute)
+  .route('/game', gameRoutes);
 
 // Export the app type for use with hono/client on the frontend:
 //   import { hc } from 'hono/client'
