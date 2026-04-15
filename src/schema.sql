@@ -85,7 +85,7 @@ CREATE TABLE user_items (
     item_id               BIGINT      PRIMARY KEY,
     user_id               BIGINT      NOT NULL REFERENCES users(user_id),
     item_type             INT         NOT NULL,
-    acquisition_type      TEXT        NOT NULL CHECK (acquisition_type IN ('buy_package', 'mystery_box')),
+    acquisition_type      TEXT        NOT NULL CHECK (acquisition_type IN ('buy_package', 'mystery_box', 'daily_check_in')),
     buy_date              TIMESTAMPTZ,
     usage_date            TIMESTAMPTZ,
     source_mystery_box_id BIGINT      REFERENCES user_items(item_id)
