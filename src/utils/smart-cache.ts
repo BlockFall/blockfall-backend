@@ -2,7 +2,7 @@ import fs from 'fs/promises';
 import { Loader } from 'layered-loader';
 import { createHash } from 'node:crypto';
 import { type LimitFunction } from 'p-limit';
-import stableStringify from './stable-stringify.js';
+import stableStringify from './stable-stringify.ts';
 
 export interface SmartCacheOptions {
   cacheSeconds?: number;

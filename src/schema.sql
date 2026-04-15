@@ -22,15 +22,6 @@ CREATE TABLE user_numbers (
     updated_at   TIMESTAMPTZ
 ) WITH (fillfactor = 80);
 
--- User Boosts (no record if no active boost)
-CREATE TABLE user_active_boost (
-    user_id     BIGINT      PRIMARY KEY REFERENCES users(user_id),
-    item_id     BIGINT      NOT NULL REFERENCES user_items(item_id),
-    multiplier  INT         NOT NULL CHECK (multiplier > 1), -- used divided by 100 in calculations (e.g. 150 for 1.5x boost)
-    started_at  TIMESTAMPTZ NOT NULL,
-    expires_at  TIMESTAMPTZ NOT NULL
-);
-
 -- Daily tournaments
 CREATE TABLE daily_tournaments (
     daily_tournament_id BIGINT PRIMARY KEY,
@@ -46,7 +37,7 @@ CREATE TABLE game_plays (
     started_at          TIMESTAMPTZ NOT NULL,
     ended_at            TIMESTAMPTZ,
     score               INT,
-    boost_multiplier    INT, -- normallly 100
+    boost_multiplier    INT, -- normallly 100 (divided by 100 in calculations. e.g. 150 for 1.5x boost)
     daily_tournament_id BIGINT      NOT NULL REFERENCES daily_tournaments(daily_tournament_id)
 );
 
@@ -91,6 +82,15 @@ CREATE TABLE user_items (
     source_mystery_box_id BIGINT      REFERENCES user_items(item_id)
 );
 
+-- User Boosts (no record if no active boost)
+CREATE TABLE user_active_boost (
+    user_id     BIGINT      PRIMARY KEY REFERENCES users(user_id),
+    item_id     BIGINT      NOT NULL REFERENCES user_items(item_id),
+    multiplier  INT         NOT NULL CHECK (multiplier > 1), -- used divided by 100 in calculations (e.g. 150 for 1.5x boost)
+    started_at  TIMESTAMPTZ NOT NULL,
+    expires_at  TIMESTAMPTZ NOT NULL
+);
+
 -- Reward payouts
 CREATE TABLE user_payouts (
     payout_id            BIGINT      PRIMARY KEY,
@@ -109,10 +109,10 @@ CREATE TABLE user_payouts (
 CREATE TABLE daily_total_scores (
   user_id        BIGINT   NOT NULL REFERENCES users(user_id),
   score_date     DATE     NOT NULL,
-  total_score    INT      NOT NULL CHECK (score >= 0),
+  total_score    INT      NOT NULL CHECK (total_score >= 0),
   rank           INT      NOT NULL CHECK (rank > 0),
   PRIMARY KEY (user_id, score_date)
-)
+);
 
 -- ============================================================
 -- Indexes
