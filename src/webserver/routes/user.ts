@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { validator } from 'hono/validator';
 import { z } from 'zod';
 import { findUserByAddress, getUserInventory, getUserWithNumbers } from '../../db/users.ts';
+import { getPendingPayouts } from '../../db/payouts.ts';
 import { authMiddleware, type AuthEnv } from '../middleware/auth.ts';
 
 /**
@@ -16,7 +17,10 @@ export const userRoutes = new Hono<AuthEnv>().use(authMiddleware).get('/', async
     return c.json({ error: 'User not found. Please sign up first.' }, 404);
   }
 
-  const inventory = await getUserInventory(user.user_id);
+  const [inventory, pendingClaims] = await Promise.all([
+    getUserInventory(user.user_id),
+    getPendingPayouts(user.user_id),
+  ]);
 
   return c.json({
     user_id: user.user_id,
@@ -32,6 +36,7 @@ export const userRoutes = new Hono<AuthEnv>().use(authMiddleware).get('/', async
       energy: user.energy,
     },
     inventory,
+    pending_claims: pendingClaims,
   });
 });
 

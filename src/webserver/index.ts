@@ -8,6 +8,7 @@ import { gameRoutes } from './routes/game.ts';
 import { leaderboardRoutes } from './routes/leaderboard.ts';
 import { checkUserRoute, userRoutes } from './routes/user.ts';
 import { purchaseRoutes } from './routes/purchase.ts';
+import { userClaimsRoutes } from './routes/userClaims.ts';
 
 const app = new Hono()
   .use('*', cors())
@@ -18,6 +19,7 @@ const app = new Hono()
   .route('/checkuser', checkUserRoute)
   .route('/game', gameRoutes)
   .route('/purchase', purchaseRoutes)
+  .route('/user_claims', userClaimsRoutes)
   .route('/checkin', checkinRoutes)
   .route('/leaderboard', leaderboardRoutes);
 
