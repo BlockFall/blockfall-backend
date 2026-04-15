@@ -34,6 +34,8 @@ export async function findTransactionByHash(txHash: string): Promise<boolean> {
 export async function processPurchase(
   userId: string,
   txHash: string,
+  txTime: Date,
+  revenue: string,
   itemTypeId: number,
   eventParams: object
 ): Promise<{ transaction_id: string }> {
@@ -42,8 +44,8 @@ export async function processPurchase(
   await sql.begin(async (tx) => {
     // 1. Save transaction
     await tx`
-      INSERT INTO user_transactions (transaction_id, user_id, tx_hash, event_params)
-      VALUES (${transactionId}, ${userId}, ${txHash}, ${JSON.stringify(eventParams)})
+      INSERT INTO user_transactions (transaction_id, user_id, tx_hash, tx_time, revenue, event_params)
+      VALUES (${transactionId}, ${userId}, ${txHash}, ${txTime}, ${revenue}, ${JSON.stringify(eventParams)})
     `;
 
     const energyAmount = ENERGY_BY_ITEM_TYPE[itemTypeId];

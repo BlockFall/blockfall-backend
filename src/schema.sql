@@ -64,8 +64,8 @@ CREATE TABLE user_transactions (
     transaction_id BIGINT      PRIMARY KEY,
     user_id        BIGINT      NOT NULL REFERENCES users(user_id),
     tx_hash        TEXT        NOT NULL UNIQUE,
-    tx_time        TIMESTAMPTZ NOT NULL
-    revenue        NUMERIC     NOT NULL DEFAULT 0 CHECK (revenue >= 0)
+    tx_time        TIMESTAMPTZ NOT NULL,
+    revenue        NUMERIC     NOT NULL DEFAULT 0 CHECK (revenue >= 0),
     event_params   JSONB       NOT NULL
 );
 

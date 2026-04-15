@@ -91,15 +91,27 @@ export const purchaseRoutes = new Hono<AuthEnv>()
         return c.json({ error: 'Invalid item type' }, 400);
       }
 
-      // 8. Process the purchase
+      // 8. Fetch block for transaction timestamp
+      const block = await client.getBlock({ blockNumber: receipt.blockNumber });
+      const txTime = new Date(Number(block.timestamp) * 1000);
+
+      // 9. Process the purchase
+      const price = event.args.price.toString();
       const eventParams = {
         itemTypeId,
         buyer,
         paymentToken: event.args.paymentToken,
-        price: event.args.price.toString(),
+        price,
       };
 
-      const result = await processPurchase(user.user_id, tx_hash, itemTypeId, eventParams);
+      const result = await processPurchase(
+        user.user_id,
+        tx_hash,
+        txTime,
+        price,
+        itemTypeId,
+        eventParams,
+      );
 
       return c.json({
         transaction_id: result.transaction_id,
