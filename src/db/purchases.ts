@@ -1,3 +1,4 @@
+import { ENERGY_BY_ITEM_TYPE, MYSTERY_BOX_ITEM_TYPE } from '../constants.ts';
 import { sql } from './index.ts';
 
 // ---------------------------------------------------------------------------
@@ -9,19 +10,6 @@ function generateId(): bigint {
   const rand = BigInt(Math.floor(Math.random() * (1 << 21)));
   return (ts << 21n) | rand;
 }
-
-// ---------------------------------------------------------------------------
-// Energy amounts by item type
-// ---------------------------------------------------------------------------
-
-const ENERGY_BY_ITEM_TYPE: Record<number, number> = {
-  1: 1,
-  2: 10,
-  3: 25,
-  4: 50,
-};
-
-const MYSTERY_BOX_ITEM_TYPE = 5;
 
 // ---------------------------------------------------------------------------
 // Queries
@@ -41,13 +29,13 @@ export async function findTransactionByHash(txHash: string): Promise<boolean> {
  * Processes a purchase transaction. Transactionally:
  * 1. Inserts into user_transactions
  * 2. If energy package (itemTypeId 1-4): inserts energy_issuance, increments user energy
- * 3. If mystery box (itemTypeId 5): inserts into user_items
+ * 3. If mystery box (itemTypeId 101): inserts into user_items
  */
 export async function processPurchase(
   userId: string,
   txHash: string,
   itemTypeId: number,
-  eventParams: object,
+  eventParams: object
 ): Promise<{ transaction_id: string }> {
   const transactionId = generateId().toString();
 

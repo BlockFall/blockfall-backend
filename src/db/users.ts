@@ -5,13 +5,13 @@ import { sql } from './index.ts';
 // postgres.js returns BIGINT columns as strings to preserve precision.
 // ---------------------------------------------------------------------------
 
-export type UserRow = {
+export interface UserRow {
   user_id: string;
   address: string; // lowercase 0x-prefixed, 40 hex chars
   name: string;
   created_at: Date;
   updated_at: Date | null;
-};
+}
 
 export type UserWithNumbersRow = UserRow & {
   best_score: number;
@@ -75,7 +75,7 @@ export async function getUserWithNumbers(address: string): Promise<UserWithNumbe
     LEFT JOIN LATERAL (
       SELECT COALESCE(SUM(gp.score), 0)::int AS today_score
       FROM   game_plays gp
-      JOIN   daily_tournaments dt ON dt.daily_tournament_id = gp.day_id
+      JOIN   daily_tournaments dt ON dt.daily_tournament_id = gp.daily_tournament_id
       WHERE  gp.user_id = u.user_id
         AND  dt.tournament_date = CURRENT_DATE
         AND  gp.score IS NOT NULL
@@ -89,12 +89,12 @@ export async function getUserWithNumbers(address: string): Promise<UserWithNumbe
 // Inventory
 // ---------------------------------------------------------------------------
 
-export type UserItemRow = {
+export interface UserItemRow {
   item_id: string;
   item_type: number;
   acquisition_type: string;
   buy_date: Date | null;
-};
+}
 
 export async function getUserInventory(userId: string): Promise<UserItemRow[]> {
   return sql<UserItemRow[]>`

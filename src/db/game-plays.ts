@@ -4,14 +4,14 @@ import { sql } from './index.ts';
 // Row types
 // ---------------------------------------------------------------------------
 
-export type GamePlayRow = {
+export interface GamePlayRow {
   game_play_id: string;
   user_id: string;
   started_at: Date;
   ended_at: Date | null;
   score: number | null;
-  day_id: string;
-};
+  daily_tournament_id: string;
+}
 
 // ---------------------------------------------------------------------------
 // ID generation (same as users.ts)
@@ -54,9 +54,9 @@ export async function startGamePlay(userId: string, dayId: string): Promise<Game
     }
 
     const inserted = await tx<GamePlayRow[]>`
-      INSERT INTO game_plays (game_play_id, user_id, started_at, day_id)
+      INSERT INTO game_plays (game_play_id, user_id, started_at, daily_tournament_id)
       VALUES (${gamePlayId}, ${userId}, now(), ${dayId})
-      RETURNING game_play_id, user_id, started_at, ended_at, score, day_id
+      RETURNING game_play_id, user_id, started_at, ended_at, score, daily_tournament_id
     `;
 
     return inserted;
@@ -79,12 +79,12 @@ export async function startGamePlay(userId: string, dayId: string): Promise<Game
 export async function endGamePlay(
   gamePlayId: string,
   userId: string,
-  score: number,
+  score: number
 ): Promise<GamePlayRow | null> {
   const rows = await sql.begin(async (tx) => {
     // Fetch and validate the game play
     const existing = await tx<GamePlayRow[]>`
-      SELECT game_play_id, user_id, started_at, ended_at, score, day_id
+      SELECT game_play_id, user_id, started_at, ended_at, score, daily_tournament_id
       FROM   game_plays
       WHERE  game_play_id = ${gamePlayId}
         AND  user_id = ${userId}
@@ -103,7 +103,7 @@ export async function endGamePlay(
       SET    score = ${score},
              ended_at = now()
       WHERE  game_play_id = ${gamePlayId}
-      RETURNING game_play_id, user_id, started_at, ended_at, score, day_id
+      RETURNING game_play_id, user_id, started_at, ended_at, score, daily_tournament_id
     `;
 
     // Update user_numbers: last_score, best_score, total_score
