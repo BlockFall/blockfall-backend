@@ -10,6 +10,7 @@ export interface GamePlayRow {
   started_at: Date;
   ended_at: Date | null;
   score: number | null;
+  boost_multiplier: number | null;
   daily_tournament_id: string;
 }
 
@@ -39,10 +40,12 @@ export async function startGamePlay(userId: string, dayId: string): Promise<Game
   const gamePlayId = generateId().toString();
 
   const rows = await sql.begin(async (tx) => {
-    // Decrement energy atomically; the WHERE energy > 0 prevents going below zero.
+    // Decrement energy and increment games_played atomically;
+    // the WHERE energy > 0 prevents going below zero.
     const updated = await tx<{ energy: number }[]>`
       UPDATE user_numbers
       SET    energy = energy - 1,
+             games_played = games_played + 1,
              updated_at = now()
       WHERE  user_id = ${userId}
         AND  energy > 0
@@ -54,9 +57,19 @@ export async function startGamePlay(userId: string, dayId: string): Promise<Game
     }
 
     const inserted = await tx<GamePlayRow[]>`
-      INSERT INTO game_plays (game_play_id, user_id, started_at, daily_tournament_id)
-      VALUES (${gamePlayId}, ${userId}, now(), ${dayId})
-      RETURNING game_play_id, user_id, started_at, ended_at, score, daily_tournament_id
+      INSERT INTO game_plays (game_play_id, user_id, started_at, boost_multiplier, daily_tournament_id)
+      VALUES (
+        ${gamePlayId},
+        ${userId},
+        now(),
+        COALESCE(
+          (SELECT multiplier FROM user_active_boost
+           WHERE user_id = ${userId} AND expires_at > now()),
+          100
+        ),
+        ${dayId}
+      )
+      RETURNING game_play_id, user_id, started_at, ended_at, score, boost_multiplier, daily_tournament_id
     `;
 
     return inserted;
@@ -84,7 +97,7 @@ export async function endGamePlay(
   const rows = await sql.begin(async (tx) => {
     // Fetch and validate the game play
     const existing = await tx<GamePlayRow[]>`
-      SELECT game_play_id, user_id, started_at, ended_at, score, daily_tournament_id
+      SELECT game_play_id, user_id, started_at, ended_at, score, boost_multiplier, daily_tournament_id
       FROM   game_plays
       WHERE  game_play_id = ${gamePlayId}
         AND  user_id = ${userId}
@@ -103,7 +116,7 @@ export async function endGamePlay(
       SET    score = ${score},
              ended_at = now()
       WHERE  game_play_id = ${gamePlayId}
-      RETURNING game_play_id, user_id, started_at, ended_at, score, daily_tournament_id
+      RETURNING game_play_id, user_id, started_at, ended_at, score, boost_multiplier, daily_tournament_id
     `;
 
     // Update user_numbers: last_score, best_score, total_score
