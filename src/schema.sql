@@ -98,7 +98,7 @@ CREATE TABLE user_payouts (
     payout_type          TEXT        NOT NULL CHECK (payout_type IN ('daily_reward')),
     action_id            TEXT        NOT NULL UNIQUE,  -- unique uint256 as hex string
     amount               NUMERIC     NOT NULL,
-    payment_token        SMALLINT    NOT NULL,
+    payment_token        SMALLINT    NOT NULL, -- 1=USDT, 2=USDC, 3=USDm
     signature            TEXT        NOT NULL,
     daily_tournament_id  BIGINT      REFERENCES daily_tournaments(daily_tournament_id), -- for daily rewards
     claim_transaction_id BIGINT      REFERENCES user_transactions(transaction_id),

@@ -1,20 +1,15 @@
 import { Hono } from 'hono';
 import { validator } from 'hono/validator';
+import { parseEventLogs } from 'viem';
 import { z } from 'zod';
-import { createPublicClient, http, parseEventLogs } from 'viem';
-import { celo } from 'viem/chains';
-import { authMiddleware, type AuthEnv } from '../middleware/auth.ts';
-import { findUserByAddress } from '../../db/users.ts';
-import { findTransactionByHash, processPurchase } from '../../db/purchases.ts';
-import { blockFallGameContractAddress } from '../../constants.ts';
 import blockFallGameAbi from '../../abis/blockfall-game.abi.ts';
+import { blockFallGameContractAddress } from '../../constants.ts';
+import { findTransactionByHash, processPurchase } from '../../db/purchases.ts';
+import { findUserByAddress } from '../../db/users.ts';
+import { getBlock, getTransactionReceipt } from '../../utils/celo-rpc-reader.ts';
+import { authMiddleware, type AuthEnv } from '../middleware/auth.ts';
 
 const VALID_ITEM_TYPES = new Set([1, 2, 3, 4, 5]);
-
-const client = createPublicClient({
-  chain: celo,
-  transport: http(),
-});
 
 export const purchaseRoutes = new Hono<AuthEnv>()
   .use(authMiddleware)
@@ -52,7 +47,7 @@ export const purchaseRoutes = new Hono<AuthEnv>()
       // 3. Fetch transaction receipt from blockchain
       let receipt;
       try {
-        receipt = await client.getTransactionReceipt({ hash: tx_hash as `0x${string}` });
+        receipt = await getTransactionReceipt(tx_hash as `0x${string}`);
       } catch {
         return c.json({ error: 'Transaction not found on chain' }, 404);
       }
@@ -92,7 +87,7 @@ export const purchaseRoutes = new Hono<AuthEnv>()
       }
 
       // 8. Fetch block for transaction timestamp
-      const block = await client.getBlock({ blockNumber: receipt.blockNumber });
+      const block = await getBlock(receipt.blockNumber);
       const txTime = new Date(Number(block.timestamp) * 1000);
 
       // 9. Process the purchase
@@ -110,12 +105,12 @@ export const purchaseRoutes = new Hono<AuthEnv>()
         txTime,
         price,
         itemTypeId,
-        eventParams,
+        eventParams
       );
 
       return c.json({
         transaction_id: result.transaction_id,
         item_type_id: itemTypeId,
       });
-    },
+    }
   );

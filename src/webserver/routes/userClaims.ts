@@ -1,19 +1,14 @@
 import { Hono } from 'hono';
 import { validator } from 'hono/validator';
+import { parseEventLogs, toHex } from 'viem';
 import { z } from 'zod';
-import { createPublicClient, http, parseEventLogs, toHex } from 'viem';
-import { celo } from 'viem/chains';
-import { authMiddleware, type AuthEnv } from '../middleware/auth.ts';
-import { findUserByAddress } from '../../db/users.ts';
-import { findTransactionByHash } from '../../db/purchases.ts';
-import { findPayoutByActionId, processClaim } from '../../db/payouts.ts';
-import { blockFallGameContractAddress } from '../../constants.ts';
 import blockFallGameAbi from '../../abis/blockfall-game.abi.ts';
-
-const client = createPublicClient({
-  chain: celo,
-  transport: http(),
-});
+import { blockFallGameContractAddress } from '../../constants.ts';
+import { findPayoutByActionId, processClaim } from '../../db/payouts.ts';
+import { findTransactionByHash } from '../../db/purchases.ts';
+import { findUserByAddress } from '../../db/users.ts';
+import { getBlock, getTransactionReceipt } from '../../utils/celo-rpc-reader.ts';
+import { authMiddleware, type AuthEnv } from '../middleware/auth.ts';
 
 export const userClaimsRoutes = new Hono<AuthEnv>()
   .use(authMiddleware)
@@ -51,7 +46,7 @@ export const userClaimsRoutes = new Hono<AuthEnv>()
       // 3. Fetch transaction receipt from blockchain
       let receipt;
       try {
-        receipt = await client.getTransactionReceipt({ hash: tx_hash as `0x${string}` });
+        receipt = await getTransactionReceipt(tx_hash as `0x${string}`);
       } catch {
         return c.json({ error: 'Transaction not found on chain' }, 404);
       }
@@ -101,7 +96,7 @@ export const userClaimsRoutes = new Hono<AuthEnv>()
       }
 
       // 8. Fetch block for transaction timestamp
-      const block = await client.getBlock({ blockNumber: receipt.blockNumber });
+      const block = await getBlock(receipt.blockNumber);
       const txTime = new Date(Number(block.timestamp) * 1000);
 
       // 9. Process the claim
@@ -117,7 +112,7 @@ export const userClaimsRoutes = new Hono<AuthEnv>()
         payout.payout_id,
         tx_hash,
         txTime,
-        eventParams,
+        eventParams
       );
 
       return c.json({
@@ -126,5 +121,5 @@ export const userClaimsRoutes = new Hono<AuthEnv>()
         action_id: actionIdHex,
         amount,
       });
-    },
+    }
   );

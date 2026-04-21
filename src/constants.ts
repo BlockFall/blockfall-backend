@@ -1,5 +1,11 @@
 export const chainId = 42220;
-export const rpcUrl = 'https://forno.celo.org';
+export const rpcUrls = [
+  'https://forno.celo.org',
+  'https://rpc.ankr.com/celo',
+  'https://celo-json-rpc.stakely.io',
+  'https://rpc.celocolombia.org',
+  'https://celo-mainnet.infura.io/v3/334f70b8ccb84c4ca47736432704fd00',
+];
 export const blockFallGameContractAddress = '0x8388DdfD12da76adA04BcF38De85F861fA3FeE54';
 
 // ---------------------------------------------------------------------------
