@@ -35,6 +35,10 @@ const nameSchema = z
   .max(50, 'Name must be at most 50 characters')
   .regex(/^[a-zA-Z0-9_]+$/, 'Name may only contain letters, numbers, and underscores');
 
+const userSourceSchema = z.enum(['mobile-web', 'web', 'minipay']);
+
+const walletInfoSchema = z.string().min(1, 'wallet_info is required').max(500);
+
 // ---------------------------------------------------------------------------
 // JWT helpers
 // ---------------------------------------------------------------------------
@@ -167,14 +171,20 @@ export const authRoutes = new Hono()
   .post(
     '/signup',
     validator('json', (value, c) => {
-      const result = siweBodySchema.extend({ name: nameSchema }).safeParse(value);
+      const result = siweBodySchema
+        .extend({
+          name: nameSchema,
+          user_source: userSourceSchema,
+          wallet_info: walletInfoSchema,
+        })
+        .safeParse(value);
       if (!result.success) {
         return c.json({ error: 'Invalid request body', details: result.error.issues }, 400);
       }
       return result.data;
     }),
     async (c) => {
-      const { message, signature, name } = c.req.valid('json');
+      const { message, signature, name, user_source, wallet_info } = c.req.valid('json');
       const verified = await verifySiwe(message, signature);
       if ('error' in verified) {
         return c.json({ error: verified.error }, verified.status);
@@ -191,7 +201,7 @@ export const authRoutes = new Hono()
       }
 
       consumeNonce(verified.nonce);
-      const user = await createUser(verified.address, name);
+      const user = await createUser(verified.address, name, user_source, wallet_info);
       const token = await signJwt(verified.address, verified.chainId);
 
       return c.json({ token, address: user.address, name: user.name }, 201);

@@ -2,13 +2,20 @@
 -- Blockfall Backend – PostgreSQL Schema
 -- ============================================================
 
--- Users
+-- Users (no-update)
 CREATE TABLE users (
-    user_id    BIGINT      PRIMARY KEY,
-    address    TEXT        NOT NULL UNIQUE  CHECK (address ~ '^0x[0-9a-f]{40}$'),
-    name       TEXT        NOT NULL UNIQUE  CHECK (char_length(name) >= 3 AND char_length(name) <= 50),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ   -- updated only on name change
+    user_id      BIGINT      PRIMARY KEY,
+    address      TEXT        NOT NULL UNIQUE  CHECK (address ~ '^0x[0-9a-f]{40}$'),
+    user_source  TEXT        NOT NULL CHECK (user_source IN ('mobile-web', 'web', 'minipay')),
+    wallet_info  TEXT        NOT NULL
+);
+
+-- A new record is inserted here on a user updated (no-update)
+CREATE TABLE user_mutable_data (
+    user_change_id  BIGINT    PRIMARY KEY,
+    user_id         BIGINT    NOT NULL REFERENCES users(user_id),
+    name            TEXT      NOT NULL UNIQUE  CHECK (char_length(name) >= 3 AND char_length(name) <= 50),
+    is_banned       BOOLEAN   NOT NULL DEFAULT FALSE
 );
 
 -- Per-user stats (high-churn row → HOT-update friendly)
@@ -122,3 +129,5 @@ CREATE INDEX ON game_plays (user_id, daily_tournament_id);
 CREATE INDEX ON energy_issuance (user_id);
 CREATE INDEX ON user_items (user_id);
 CREATE INDEX ON user_payouts (user_id);
+-- For user_mutable_data, we will often query the latest record for a user, so we index by user_id and user_change_id desc to optimize that query
+CREATE INDEX idx_user_mutable_data_latest ON user_mutable_data (user_id, user_change_id DESC);

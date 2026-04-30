@@ -26,6 +26,8 @@ export const userRoutes = new Hono<AuthEnv>().use(authMiddleware).get('/', async
     user_id: user.user_id,
     address: user.address,
     name: user.name,
+    user_source: user.user_source,
+    is_banned: user.is_banned,
     created_at: user.created_at,
     stats: {
       best_score: user.best_score,

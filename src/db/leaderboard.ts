@@ -22,16 +22,26 @@ export interface YesterdayLeaderboardEntry extends LeaderboardEntry {
 // top-N and look up any user's rank without a second query.
 // ---------------------------------------------------------------------------
 
+const LATEST_MUTABLE_JOIN = sql`
+  JOIN LATERAL (
+    SELECT name FROM user_mutable_data
+    WHERE  user_id = u.user_id
+    ORDER BY user_change_id DESC
+    LIMIT 1
+  ) umd ON true
+`;
+
 export async function fetchYesterdayLeaderboard(): Promise<YesterdayLeaderboardEntry[]> {
   return sql<YesterdayLeaderboardEntry[]>`
     SELECT u.user_id,
-           u.name,
+           umd.name,
            u.address,
            dts.total_score,
            dts.rank,
            p.amount AS reward
     FROM   daily_total_scores dts
     JOIN   users u ON u.user_id = dts.user_id
+    ${LATEST_MUTABLE_JOIN}
     LEFT JOIN daily_tournaments dt ON dt.tournament_date = dts.score_date
     LEFT JOIN user_payouts p
            ON p.user_id = dts.user_id
@@ -51,15 +61,16 @@ export async function fetchTodayLeaderboard(): Promise<LeaderboardEntry[]> {
            RANK() OVER (ORDER BY total_score DESC)::int AS rank
     FROM (
       SELECT u.user_id,
-             u.name,
+             umd.name,
              u.address,
              SUM(gp.score)::int AS total_score
       FROM   game_plays gp
       JOIN   daily_tournaments dt ON dt.daily_tournament_id = gp.daily_tournament_id
       JOIN   users u ON u.user_id = gp.user_id
+      ${LATEST_MUTABLE_JOIN}
       WHERE  dt.tournament_date = (now() AT TIME ZONE 'UTC')::date
         AND  gp.score IS NOT NULL
-      GROUP BY u.user_id, u.name, u.address
+      GROUP BY u.user_id, umd.name, u.address
     ) t
     ORDER BY rank, user_id
   `;
@@ -68,12 +79,13 @@ export async function fetchTodayLeaderboard(): Promise<LeaderboardEntry[]> {
 export async function fetchOverallLeaderboard(): Promise<LeaderboardEntry[]> {
   return sql<LeaderboardEntry[]>`
     SELECT u.user_id,
-           u.name,
+           umd.name,
            u.address,
            un.total_score::int AS total_score,
            RANK() OVER (ORDER BY un.total_score DESC)::int AS rank
     FROM   user_numbers un
     JOIN   users u ON u.user_id = un.user_id
+    ${LATEST_MUTABLE_JOIN}
     WHERE  un.total_score > 0
     ORDER BY rank, u.user_id
   `;
