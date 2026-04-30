@@ -1,14 +1,5 @@
+import { generateId } from '../utils/index.ts';
 import { sql } from './index.ts';
-
-// ---------------------------------------------------------------------------
-// ID generation (same as other modules)
-// ---------------------------------------------------------------------------
-
-function generateId(): bigint {
-  const ts = BigInt(Date.now()) & 0x3ffffffffffn;
-  const rand = BigInt(Math.floor(Math.random() * (1 << 21)));
-  return (ts << 21n) | rand;
-}
 
 // ---------------------------------------------------------------------------
 // Row types

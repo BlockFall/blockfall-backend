@@ -1,4 +1,5 @@
 import { MYSTERY_BOX_ITEM_TYPE } from '../constants.ts';
+import { generateId } from '../utils/index.ts';
 import { sql } from './index.ts';
 
 // ---------------------------------------------------------------------------
@@ -15,16 +16,6 @@ export interface CheckInResult {
   energy_granted: number;
   streak: number;
   mystery_box_item_id: string | null;
-}
-
-// ---------------------------------------------------------------------------
-// ID generation (same as other modules)
-// ---------------------------------------------------------------------------
-
-function generateId(): bigint {
-  const ts = BigInt(Date.now()) & 0x3ffffffffffn;
-  const rand = BigInt(Math.floor(Math.random() * (1 << 21)));
-  return (ts << 21n) | rand;
 }
 
 // ---------------------------------------------------------------------------

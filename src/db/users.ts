@@ -1,4 +1,4 @@
-import { dateFromId } from '../utils/index.ts';
+import { dateFromId, generateId } from '../utils/index.ts';
 import { sql } from './index.ts';
 
 // ---------------------------------------------------------------------------
@@ -26,18 +26,6 @@ export type UserWithNumbersRow = UserRow & {
   today_score: number;
   energy: number;
 };
-
-// ---------------------------------------------------------------------------
-// ID generation
-// Simple 63-bit ID: 42-bit ms timestamp | 21-bit random — no external dep.
-// Collision-safe for the traffic volumes of a game backend.
-// ---------------------------------------------------------------------------
-
-function generateId(): bigint {
-  const ts = BigInt(Date.now()) & 0x3ffffffffffn; // 42 bits
-  const rand = BigInt(Math.floor(Math.random() * (1 << 21)));
-  return (ts << 21n) | rand;
-}
 
 // ---------------------------------------------------------------------------
 // Queries

@@ -1,3 +1,4 @@
+import { generateId } from '../utils/index.ts';
 import { sql } from './index.ts';
 
 // ---------------------------------------------------------------------------
@@ -12,16 +13,6 @@ export interface GamePlayRow {
   score: number | null;
   boost_multiplier: number | null;
   daily_tournament_id: string;
-}
-
-// ---------------------------------------------------------------------------
-// ID generation (same as users.ts)
-// ---------------------------------------------------------------------------
-
-function generateId(): bigint {
-  const ts = BigInt(Date.now()) & 0x3ffffffffffn;
-  const rand = BigInt(Math.floor(Math.random() * (1 << 21)));
-  return (ts << 21n) | rand;
 }
 
 // ---------------------------------------------------------------------------
