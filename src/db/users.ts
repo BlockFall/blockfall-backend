@@ -121,23 +121,48 @@ export async function getUserInventory(userId: string): Promise<UserItemRow[]> {
 
 const SIGNUP_ENERGY = 10;
 
+export type CreateUserResult =
+  | { success: true; user: UserRow }
+  | { success: false; reason: 'name_taken' };
+
 /**
  * Creates a user + initial user_mutable_data + user_numbers (with initial energy)
- * + energy_issuance record in a single transaction. Throws postgres error '23505'
- * on duplicate address/name.
+ * + energy_issuance record in a single transaction. Name uniqueness is checked
+ * against the latest user_mutable_data row of every other user, serialized via
+ * a transaction-scoped advisory lock keyed on the name. The unique constraint
+ * on users.address still throws postgres error '23505' on duplicate address.
  */
 export async function createUser(
   address: string,
   name: string,
   userSource: UserSource,
   walletInfo: string
-): Promise<UserRow> {
+): Promise<CreateUserResult> {
   const userId = generateId().toString();
   const userChangeId = generateId().toString();
   const issuanceId = generateId().toString();
   const lowerAddress = address.toLowerCase();
 
-  await sql.begin(async (tx) => {
+  const taken = await sql.begin<boolean>(async (tx) => {
+    await tx`SELECT pg_advisory_xact_lock(hashtext(${name}))`;
+
+    const conflict = await tx`
+      SELECT 1
+      FROM   users u
+      JOIN LATERAL (
+        SELECT name
+        FROM   user_mutable_data
+        WHERE  user_id = u.user_id
+        ORDER BY user_change_id DESC
+        LIMIT 1
+      ) latest ON true
+      WHERE  latest.name = ${name}
+      LIMIT 1
+    `;
+    if (conflict.length > 0) {
+      return true;
+    }
+
     await tx`
       INSERT INTO users (user_id, address, user_source, wallet_info)
       VALUES (${userId}, ${lowerAddress}, ${userSource}, ${walletInfo})
@@ -154,9 +179,89 @@ export async function createUser(
       INSERT INTO energy_issuance (energy_issuance_id, user_id, issuance_type, amount)
       VALUES (${issuanceId}, ${userId}, 'signup', ${SIGNUP_ENERGY})
     `;
+    return false;
   });
+
+  if (taken) {
+    return { success: false, reason: 'name_taken' };
+  }
 
   // Safe to assert non-null: we just inserted it.
   // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-  return (await findUserByAddress(lowerAddress))!;
+  return { success: true, user: (await findUserByAddress(lowerAddress))! };
+}
+
+export type RenameResult =
+  | { success: true }
+  | { success: false; reason: 'name_taken' | 'user_not_found' | 'no_change' };
+
+/**
+ * Inserts a new user_mutable_data row with the given name, preserving the
+ * latest is_banned flag. Uniqueness is checked against the latest name of
+ * every other user inside the same transaction; a transaction-scoped advisory
+ * lock keyed on the name serializes concurrent renames to the same target.
+ */
+export async function renameUser(address: string, newName: string): Promise<RenameResult> {
+  const lowerAddress = address.toLowerCase();
+  const userChangeId = generateId().toString();
+
+  return sql.begin<RenameResult>(async (tx) => {
+    // Serialize concurrent renames targeting the same name.
+    await tx`SELECT pg_advisory_xact_lock(hashtext(${newName}))`;
+
+    const currentRows = await tx<{ user_id: string; name: string }[]>`
+      SELECT u.user_id, umd.name
+      FROM   users u
+      JOIN LATERAL (
+        SELECT name
+        FROM   user_mutable_data
+        WHERE  user_id = u.user_id
+        ORDER BY user_change_id DESC
+        LIMIT 1
+      ) umd ON true
+      WHERE  u.address = ${lowerAddress}
+    `;
+    if (!currentRows[0]) {
+      return { success: false, reason: 'user_not_found' };
+    }
+    const { user_id: userId, name: currentName } = currentRows[0];
+
+    if (currentName === newName) {
+      return { success: false, reason: 'no_change' };
+    }
+
+    const conflict = await tx`
+      SELECT 1
+      FROM   users u
+      JOIN LATERAL (
+        SELECT name
+        FROM   user_mutable_data
+        WHERE  user_id = u.user_id
+        ORDER BY user_change_id DESC
+        LIMIT 1
+      ) latest ON true
+      WHERE  latest.name = ${newName}
+        AND  u.user_id <> ${userId}
+      LIMIT 1
+    `;
+    if (conflict.length > 0) {
+      return { success: false, reason: 'name_taken' };
+    }
+
+    const latest = await tx<{ is_banned: boolean }[]>`
+      SELECT is_banned
+      FROM   user_mutable_data
+      WHERE  user_id = ${userId}
+      ORDER BY user_change_id DESC
+      LIMIT 1
+    `;
+    const isBanned = latest[0]?.is_banned ?? false;
+
+    await tx`
+      INSERT INTO user_mutable_data (user_change_id, user_id, name, is_banned)
+      VALUES (${userChangeId}, ${userId}, ${newName}, ${isBanned})
+    `;
+
+    return { success: true };
+  });
 }

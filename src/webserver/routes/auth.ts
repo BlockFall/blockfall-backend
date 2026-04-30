@@ -29,7 +29,7 @@ const siweBodySchema = z.object({
   signature: z.string().regex(/^0x[0-9a-fA-F]+$/, 'signature must be 0x-prefixed hex'),
 });
 
-const nameSchema = z
+export const nameSchema = z
   .string()
   .min(3, 'Name must be at least 3 characters')
   .max(50, 'Name must be at most 50 characters')
@@ -195,16 +195,16 @@ export const authRoutes = new Hono()
         return c.json({ error: 'This wallet address is already registered.' }, 409);
       }
 
-      // Guard: name already taken
-      if (await findUserByName(name)) {
+      // createUser checks name uniqueness against latest names atomically.
+      const result = await createUser(verified.address, name, user_source, wallet_info);
+      if (!result.success) {
         return c.json({ error: 'This name is already taken.' }, 409);
       }
 
       consumeNonce(verified.nonce);
-      const user = await createUser(verified.address, name, user_source, wallet_info);
       const token = await signJwt(verified.address, verified.chainId);
 
-      return c.json({ token, address: user.address, name: user.name }, 201);
+      return c.json({ token, address: result.user.address, name: result.user.name }, 201);
     }
   )
 

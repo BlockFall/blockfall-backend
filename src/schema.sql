@@ -14,7 +14,7 @@ CREATE TABLE users (
 CREATE TABLE user_mutable_data (
     user_change_id  BIGINT    PRIMARY KEY,
     user_id         BIGINT    NOT NULL REFERENCES users(user_id),
-    name            TEXT      NOT NULL UNIQUE  CHECK (char_length(name) >= 3 AND char_length(name) <= 50),
+    name            TEXT      NOT NULL CHECK (char_length(name) >= 3 AND char_length(name) <= 50),
     is_banned       BOOLEAN   NOT NULL DEFAULT FALSE
 );
 
