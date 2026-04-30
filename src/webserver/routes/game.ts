@@ -1,8 +1,8 @@
 import { Hono } from 'hono';
 import { validator } from 'hono/validator';
 import { z } from 'zod';
+import { endGamePlay, getOrCreateTodayTournament, startGamePlay } from '../../db/game-plays.ts';
 import { findUserByAddress } from '../../db/users.ts';
-import { startGamePlay, endGamePlay, getOrCreateTodayTournament } from '../../db/game-plays.ts';
 import { authMiddleware, type AuthEnv } from '../middleware/auth.ts';
 
 export const gameRoutes = new Hono<AuthEnv>()
@@ -58,8 +58,10 @@ export const gameRoutes = new Hono<AuthEnv>()
 
       if (!gamePlay) {
         return c.json(
-          { error: 'Invalid game play: not found, already ended, or session expired (15 min limit)' },
-          400,
+          {
+            error: 'Invalid game play: not found, already ended, or session expired (15 min limit)',
+          },
+          400
         );
       }
 
@@ -69,5 +71,5 @@ export const gameRoutes = new Hono<AuthEnv>()
         started_at: gamePlay.started_at,
         ended_at: gamePlay.ended_at,
       });
-    },
+    }
   );

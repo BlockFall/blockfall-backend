@@ -6,8 +6,8 @@ import { authRoutes } from './routes/auth.ts';
 import { checkinRoutes } from './routes/checkin.ts';
 import { gameRoutes } from './routes/game.ts';
 import { leaderboardRoutes } from './routes/leaderboard.ts';
-import { checkUserRoute, userRoutes } from './routes/user.ts';
 import { purchaseRoutes } from './routes/purchase.ts';
+import { checkUserRoute, userRoutes } from './routes/user.ts';
 import { userClaimsRoutes } from './routes/userClaims.ts';
 
 const app = new Hono()

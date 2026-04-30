@@ -68,11 +68,11 @@ export const purchaseRoutes = new Hono<AuthEnv>()
         logs: receipt.logs,
       });
 
-      if (itemBoughtLogs.length === 0) {
+      if (itemBoughtLogs.length === 0 || itemBoughtLogs[0] == null) {
         return c.json({ error: 'No ItemBought event found in transaction' }, 400);
       }
 
-      const event = itemBoughtLogs[0]!;
+      const event = itemBoughtLogs[0];
       const itemTypeId = Number(event.args.itemTypeId);
       const buyer = event.args.buyer.toLowerCase();
 

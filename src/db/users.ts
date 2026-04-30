@@ -157,5 +157,6 @@ export async function createUser(
   });
 
   // Safe to assert non-null: we just inserted it.
+  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
   return (await findUserByAddress(lowerAddress))!;
 }

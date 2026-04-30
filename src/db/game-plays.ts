@@ -153,5 +153,8 @@ export async function getOrCreateTodayTournament(): Promise<string> {
     FROM   daily_tournaments
     WHERE  tournament_date = (now() AT TIME ZONE 'UTC')::date
   `;
-  return rows[0]!.daily_tournament_id;
+  if (rows[0] == null) {
+    throw new Error("Failed to create or fetch today's tournament");
+  }
+  return rows[0].daily_tournament_id;
 }

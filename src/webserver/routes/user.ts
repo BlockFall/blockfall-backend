@@ -1,8 +1,8 @@
 import { Hono } from 'hono';
 import { validator } from 'hono/validator';
 import { z } from 'zod';
-import { findUserByAddress, getUserInventory, getUserWithNumbers } from '../../db/users.ts';
 import { getPendingPayouts } from '../../db/payouts.ts';
+import { findUserByAddress, getUserInventory, getUserWithNumbers } from '../../db/users.ts';
 import { authMiddleware, type AuthEnv } from '../middleware/auth.ts';
 
 /**

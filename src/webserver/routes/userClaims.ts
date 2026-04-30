@@ -67,11 +67,11 @@ export const userClaimsRoutes = new Hono<AuthEnv>()
         logs: receipt.logs,
       });
 
-      if (claimedLogs.length === 0) {
+      if (claimedLogs.length === 0 || claimedLogs[0] == null) {
         return c.json({ error: 'No Claimed event found in transaction' }, 400);
       }
 
-      const event = claimedLogs[0]!;
+      const event = claimedLogs[0];
       const player = event.args.player.toLowerCase();
       const actionIdHex = toHex(event.args.actionId);
       const amount = event.args.amount.toString();

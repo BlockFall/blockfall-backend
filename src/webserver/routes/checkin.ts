@@ -1,9 +1,6 @@
 import { Hono } from 'hono';
+import { getLastSevenDayCheckins, performDailyCheckin } from '../../db/daily-checkins.ts';
 import { findUserByAddress } from '../../db/users.ts';
-import {
-  getLastSevenDayCheckins,
-  performDailyCheckin,
-} from '../../db/daily-checkins.ts';
 import { authMiddleware, type AuthEnv } from '../middleware/auth.ts';
 
 export const checkinRoutes = new Hono<AuthEnv>()

@@ -1,5 +1,5 @@
-import { jwtVerify } from 'jose';
 import { createMiddleware } from 'hono/factory';
+import { jwtVerify } from 'jose';
 import config from '../../config.ts';
 
 // ---------------------------------------------------------------------------
@@ -12,11 +12,11 @@ export interface JwtPayload {
 }
 
 // Augment Hono's Variables map so `c.get('user')` is fully typed downstream.
-export type AuthEnv = {
+export interface AuthEnv {
   Variables: {
     user: JwtPayload;
   };
-};
+}
 
 // ---------------------------------------------------------------------------
 // Middleware
