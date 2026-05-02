@@ -58,6 +58,17 @@ CREATE TABLE game_play_results (
     score               INT         NOT NULL CHECK (score >= 0)
 );
 
+-- In-game events for analytics (no-update)
+CREATE TABLE game_ingame_events (
+    event_id           BIGINT      PRIMARY KEY,
+    game_play_id       BIGINT      NOT NULL REFERENCES game_plays(game_play_id),
+    event_time         TIMESTAMPTZ NOT NULL,
+    event_type         TEXT        NOT NULL,
+    intval             INT,
+    textval            TEXT,
+    extra_data         JSONB
+);
+
 -- Daily check-ins (one per user per date enforced)
 CREATE TABLE daily_checkins (
     check_in_id   BIGINT      PRIMARY KEY,

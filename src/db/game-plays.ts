@@ -74,10 +74,38 @@ export async function startGamePlay(userId: string, dayId: string): Promise<Game
 const GAME_PLAY_MAX_DURATION_MS = 15 * 60 * 1000;
 
 /**
+ * Sums durations of all pause→resume intervals for a game play. If the last
+ * pause has no matching resume, that interval extends to now() (the user is
+ * still paused at end-of-game).
+ */
+async function getPausedDurationMs(gamePlayId: string): Promise<number> {
+  const rows = await sql<{ paused_ms: string }[]>`
+    WITH pr AS (
+      SELECT event_time,
+             event_type,
+             LEAD(event_time) OVER (ORDER BY event_time, event_id) AS next_time,
+             LEAD(event_type) OVER (ORDER BY event_time, event_id) AS next_type
+      FROM   game_ingame_events
+      WHERE  game_play_id = ${gamePlayId}
+        AND  event_type IN ('pause', 'resume')
+    )
+    SELECT COALESCE(
+             SUM(EXTRACT(EPOCH FROM (COALESCE(next_time, now()) - event_time)) * 1000),
+             0
+           )::BIGINT AS paused_ms
+    FROM   pr
+    WHERE  event_type = 'pause'
+      AND  (next_type = 'resume' OR next_type IS NULL)
+  `;
+  return Number(rows[0]?.paused_ms ?? 0);
+}
+
+/**
  * Ends a game play session. Validates:
  * 1. The game play exists and belongs to the given user
  * 2. It hasn't already ended (no row in game_play_results)
- * 3. It started within the last 15 minutes (derived from game_play_id)
+ * 3. Active play time is within 15 minutes (wall-clock since start, minus
+ *    pause→resume intervals from game_ingame_events)
  *
  * Inserts a game_play_results row, and updates user_numbers
  * (last_score, best_score, total_score).
@@ -90,7 +118,8 @@ export async function endGamePlay(
   score: number
 ): Promise<GamePlayResultRow | null> {
   const startedAt = dateFromId(gamePlayId);
-  if (Date.now() - startedAt.getTime() > GAME_PLAY_MAX_DURATION_MS) {
+  const pausedMs = await getPausedDurationMs(gamePlayId);
+  if (Date.now() - startedAt.getTime() - pausedMs > GAME_PLAY_MAX_DURATION_MS) {
     return null;
   }
 
@@ -127,6 +156,50 @@ export async function endGamePlay(
   });
 
   return rows?.[0] ?? null;
+}
+
+export interface IngameEventRow {
+  event_id: string;
+  game_play_id: string;
+  event_time: Date;
+  event_type: string;
+  intval: number | null;
+  textval: string | null;
+  extra_data: unknown;
+}
+
+/**
+ * Inserts an in-game analytics event. Verifies the game_play exists, belongs
+ * to the given user, and has not yet ended. Returns the inserted row, or
+ * null if those checks fail.
+ */
+export async function insertIngameEvent(
+  gamePlayId: string,
+  userId: string,
+  eventType: string,
+  intval: number | null,
+  textval: string | null,
+  extraData: unknown
+): Promise<IngameEventRow | null> {
+  const eventId = generateId().toString();
+  const extraJson = extraData === null || extraData === undefined ? null : JSON.stringify(extraData);
+
+  const inserted = await sql<IngameEventRow[]>`
+    INSERT INTO game_ingame_events (event_id, game_play_id, event_time, event_type, intval, textval, extra_data)
+    SELECT ${eventId}, ${gamePlayId}, now(), ${eventType}, ${intval}, ${textval}, ${extraJson}::jsonb
+    WHERE EXISTS (
+      SELECT 1 FROM game_plays
+      WHERE game_play_id = ${gamePlayId}
+        AND user_id = ${userId}
+    )
+    AND NOT EXISTS (
+      SELECT 1 FROM game_play_results
+      WHERE game_play_id = ${gamePlayId}
+    )
+    RETURNING event_id, game_play_id, event_time, event_type, intval, textval, extra_data
+  `;
+
+  return inserted[0] ?? null;
 }
 
 /**

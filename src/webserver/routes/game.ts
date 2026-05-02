@@ -1,7 +1,12 @@
 import { Hono } from 'hono';
 import { validator } from 'hono/validator';
 import { z } from 'zod';
-import { endGamePlay, getOrCreateTodayTournament, startGamePlay } from '../../db/game-plays.ts';
+import {
+  endGamePlay,
+  getOrCreateTodayTournament,
+  insertIngameEvent,
+  startGamePlay,
+} from '../../db/game-plays.ts';
 import { findUserByAddress } from '../../db/users.ts';
 import { dateFromId } from '../../utils/index.ts';
 import { authMiddleware, type AuthEnv } from '../middleware/auth.ts';
@@ -71,6 +76,54 @@ export const gameRoutes = new Hono<AuthEnv>()
         score: result.score,
         started_at: dateFromId(result.game_play_id),
         ended_at: result.ended_at,
+      });
+    }
+  )
+
+  // POST /game/event — record an in-game analytics event (pause, resume,
+  // line_clear, etc.). event_id and event_time are server-generated.
+  .post(
+    '/event',
+    validator('json', (value, c) => {
+      const result = z
+        .object({
+          game_play_id: z.string().min(1),
+          event_type: z.string().min(1).max(64),
+          intval: z.number().int().nullish(),
+          textval: z.string().max(1024).nullish(),
+          extra_data: z.unknown().nullish(),
+        })
+        .safeParse(value);
+      if (!result.success) {
+        return c.json({ error: 'Invalid request body', details: result.error.issues }, 400);
+      }
+      return result.data;
+    }),
+    async (c) => {
+      const { address } = c.var.user;
+      const { game_play_id, event_type, intval, textval, extra_data } = c.req.valid('json');
+
+      const user = await findUserByAddress(address);
+      if (!user) {
+        return c.json({ error: 'User not found' }, 404);
+      }
+
+      const event = await insertIngameEvent(
+        game_play_id,
+        user.user_id,
+        event_type,
+        intval ?? null,
+        textval ?? null,
+        extra_data ?? null
+      );
+
+      if (!event) {
+        return c.json({ error: 'Invalid game play: not found, not yours, or already ended' }, 400);
+      }
+
+      return c.json({
+        event_id: event.event_id,
+        event_time: event.event_time,
       });
     }
   );
