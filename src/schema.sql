@@ -29,12 +29,18 @@ CREATE TABLE user_numbers (
     updated_at   TIMESTAMPTZ
 ) WITH (fillfactor = 80);
 
--- Daily tournaments
+-- Daily tournaments (no-update)
 CREATE TABLE daily_tournaments (
     daily_tournament_id BIGINT PRIMARY KEY,
-    tournament_date     DATE   NOT NULL UNIQUE,
-    processed_at        TIMESTAMPTZ,
-    revenue             NUMERIC CHECK (revenue >= 0)
+    tournament_date     DATE   NOT NULL UNIQUE
+);
+
+-- Daily tournament Results, added when processed (no-update) (one-to-one, enforced by PK/FK)
+CREATE TABLE daily_tournament_results (
+    daily_tournament_id BIGINT  PRIMARY KEY REFERENCES daily_tournaments(daily_tournament_id),
+    processed_at        TIMESTAMPTZ NOT NULL,
+    revenue             NUMERIC NOT NULL CHECK (revenue >= 0),
+    used_for_payout     NUMERIC NOT NULL CHECK (used_for_payout >= 0)
 );
 
 -- Individual game sessions
