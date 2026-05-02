@@ -85,12 +85,12 @@ export async function getUserWithNumbers(address: string): Promise<UserWithNumbe
     ${LATEST_MUTABLE_JOIN}
     LEFT JOIN user_numbers un ON un.user_id = u.user_id
     LEFT JOIN LATERAL (
-      SELECT COALESCE(SUM(gp.score), 0)::int AS today_score
+      SELECT COALESCE(SUM(gpr.score), 0)::int AS today_score
       FROM   game_plays gp
+      JOIN   game_play_results gpr ON gpr.game_play_id = gp.game_play_id
       JOIN   daily_tournaments dt ON dt.daily_tournament_id = gp.daily_tournament_id
       WHERE  gp.user_id = u.user_id
-        AND  dt.tournament_date = CURRENT_DATE
-        AND  gp.score IS NOT NULL
+        AND  dt.tournament_date = (now() AT TIME ZONE 'UTC')::date
     ) ts ON true
     WHERE  u.address = ${address.toLowerCase()}
   `;

@@ -43,15 +43,19 @@ CREATE TABLE daily_tournament_results (
     used_for_payout     NUMERIC NOT NULL CHECK (used_for_payout >= 0)
 );
 
--- Individual game sessions
+-- Individual game sessions, added when game starts (no-update)
 CREATE TABLE game_plays (
-    game_play_id        BIGINT      PRIMARY KEY,
+    game_play_id        BIGINT      PRIMARY KEY, -- has start_date in it
     user_id             BIGINT      NOT NULL REFERENCES users(user_id),
-    started_at          TIMESTAMPTZ NOT NULL,
-    ended_at            TIMESTAMPTZ,
-    score               INT,
-    boost_multiplier    INT, -- normallly 100 (divided by 100 in calculations. e.g. 150 for 1.5x boost)
-    daily_tournament_id BIGINT      NOT NULL REFERENCES daily_tournaments(daily_tournament_id)
+    daily_tournament_id BIGINT      NOT NULL REFERENCES daily_tournaments(daily_tournament_id),
+    boost_multiplier    INT         NOT NULL -- normally 100 (divided by 100 in calculations. e.g. 150 for 1.5x boost)
+);
+
+-- Game plays results (no-update) (one-to-one with game_plays, enforced by PK/FK)
+CREATE TABLE game_play_results (
+    game_play_id        BIGINT      PRIMARY KEY REFERENCES game_plays(game_play_id),
+    ended_at            TIMESTAMPTZ NOT NULL,
+    score               INT         NOT NULL CHECK (score >= 0)
 );
 
 -- Daily check-ins (one per user per date enforced)

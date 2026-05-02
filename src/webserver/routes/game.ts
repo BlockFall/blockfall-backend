@@ -3,6 +3,7 @@ import { validator } from 'hono/validator';
 import { z } from 'zod';
 import { endGamePlay, getOrCreateTodayTournament, startGamePlay } from '../../db/game-plays.ts';
 import { findUserByAddress } from '../../db/users.ts';
+import { dateFromId } from '../../utils/index.ts';
 import { authMiddleware, type AuthEnv } from '../middleware/auth.ts';
 
 export const gameRoutes = new Hono<AuthEnv>()
@@ -26,7 +27,7 @@ export const gameRoutes = new Hono<AuthEnv>()
 
     return c.json({
       game_play_id: gamePlay.game_play_id,
-      started_at: gamePlay.started_at,
+      started_at: dateFromId(gamePlay.game_play_id),
     });
   })
 
@@ -54,9 +55,9 @@ export const gameRoutes = new Hono<AuthEnv>()
         return c.json({ error: 'User not found' }, 404);
       }
 
-      const gamePlay = await endGamePlay(game_play_id, user.user_id, score);
+      const result = await endGamePlay(game_play_id, user.user_id, score);
 
-      if (!gamePlay) {
+      if (!result) {
         return c.json(
           {
             error: 'Invalid game play: not found, already ended, or session expired (15 min limit)',
@@ -66,10 +67,10 @@ export const gameRoutes = new Hono<AuthEnv>()
       }
 
       return c.json({
-        game_play_id: gamePlay.game_play_id,
-        score: gamePlay.score,
-        started_at: gamePlay.started_at,
-        ended_at: gamePlay.ended_at,
+        game_play_id: result.game_play_id,
+        score: result.score,
+        started_at: dateFromId(result.game_play_id),
+        ended_at: result.ended_at,
       });
     }
   );

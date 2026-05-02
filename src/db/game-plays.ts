@@ -1,4 +1,4 @@
-import { generateId } from '../utils/index.ts';
+import { dateFromId, generateId } from '../utils/index.ts';
 import { sql } from './index.ts';
 
 // ---------------------------------------------------------------------------
@@ -8,11 +8,14 @@ import { sql } from './index.ts';
 export interface GamePlayRow {
   game_play_id: string;
   user_id: string;
-  started_at: Date;
-  ended_at: Date | null;
-  score: number | null;
-  boost_multiplier: number | null;
   daily_tournament_id: string;
+  boost_multiplier: number;
+}
+
+export interface GamePlayResultRow {
+  game_play_id: string;
+  ended_at: Date;
+  score: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -48,19 +51,18 @@ export async function startGamePlay(userId: string, dayId: string): Promise<Game
     }
 
     const inserted = await tx<GamePlayRow[]>`
-      INSERT INTO game_plays (game_play_id, user_id, started_at, boost_multiplier, daily_tournament_id)
+      INSERT INTO game_plays (game_play_id, user_id, daily_tournament_id, boost_multiplier)
       VALUES (
         ${gamePlayId},
         ${userId},
-        now(),
+        ${dayId},
         COALESCE(
           (SELECT multiplier FROM user_active_boost
            WHERE user_id = ${userId} AND expires_at > now()),
           100
-        ),
-        ${dayId}
+        )
       )
-      RETURNING game_play_id, user_id, started_at, ended_at, score, boost_multiplier, daily_tournament_id
+      RETURNING game_play_id, user_id, daily_tournament_id, boost_multiplier
     `;
 
     return inserted;
@@ -69,48 +71,49 @@ export async function startGamePlay(userId: string, dayId: string): Promise<Game
   return rows?.[0] ?? null;
 }
 
+const GAME_PLAY_MAX_DURATION_MS = 15 * 60 * 1000;
+
 /**
  * Ends a game play session. Validates:
- * 1. The game play belongs to the given user
- * 2. It hasn't already ended
- * 3. It started within the last 15 minutes
+ * 1. The game play exists and belongs to the given user
+ * 2. It hasn't already ended (no row in game_play_results)
+ * 3. It started within the last 15 minutes (derived from game_play_id)
  *
- * Updates score and ended_at, and also updates user_numbers
+ * Inserts a game_play_results row, and updates user_numbers
  * (last_score, best_score, total_score).
  *
- * Returns the updated game play row, or null if validation fails.
+ * Returns the inserted result row, or null if validation fails.
  */
 export async function endGamePlay(
   gamePlayId: string,
   userId: string,
   score: number
-): Promise<GamePlayRow | null> {
+): Promise<GamePlayResultRow | null> {
+  const startedAt = dateFromId(gamePlayId);
+  if (Date.now() - startedAt.getTime() > GAME_PLAY_MAX_DURATION_MS) {
+    return null;
+  }
+
   const rows = await sql.begin(async (tx) => {
-    // Fetch and validate the game play
-    const existing = await tx<GamePlayRow[]>`
-      SELECT game_play_id, user_id, started_at, ended_at, score, boost_multiplier, daily_tournament_id
-      FROM   game_plays
-      WHERE  game_play_id = ${gamePlayId}
-        AND  user_id = ${userId}
-        AND  ended_at IS NULL
-        AND  started_at > now() - interval '15 minutes'
-      FOR UPDATE
+    // Atomic insert: succeeds only if the game_play exists with the right
+    // user and no result row exists yet. PK on game_play_results prevents
+    // double-end races.
+    const inserted = await tx<GamePlayResultRow[]>`
+      INSERT INTO game_play_results (game_play_id, ended_at, score)
+      SELECT ${gamePlayId}, now(), ${score}
+      WHERE EXISTS (
+        SELECT 1 FROM game_plays
+        WHERE game_play_id = ${gamePlayId}
+          AND user_id = ${userId}
+      )
+      ON CONFLICT (game_play_id) DO NOTHING
+      RETURNING game_play_id, ended_at, score
     `;
 
-    if (existing.length === 0) {
+    if (inserted.length === 0) {
       return null;
     }
 
-    // Update the game play with score and end time
-    const updated = await tx<GamePlayRow[]>`
-      UPDATE game_plays
-      SET    score = ${score},
-             ended_at = now()
-      WHERE  game_play_id = ${gamePlayId}
-      RETURNING game_play_id, user_id, started_at, ended_at, score, boost_multiplier, daily_tournament_id
-    `;
-
-    // Update user_numbers: last_score, best_score, total_score
     await tx`
       UPDATE user_numbers
       SET    last_score  = ${score},
@@ -120,7 +123,7 @@ export async function endGamePlay(
       WHERE  user_id = ${userId}
     `;
 
-    return updated;
+    return inserted;
   });
 
   return rows?.[0] ?? null;

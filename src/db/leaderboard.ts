@@ -63,13 +63,13 @@ export async function fetchTodayLeaderboard(): Promise<LeaderboardEntry[]> {
       SELECT u.user_id,
              umd.name,
              u.address,
-             SUM(gp.score)::int AS total_score
+             SUM(gpr.score)::int AS total_score
       FROM   game_plays gp
+      JOIN   game_play_results gpr ON gpr.game_play_id = gp.game_play_id
       JOIN   daily_tournaments dt ON dt.daily_tournament_id = gp.daily_tournament_id
       JOIN   users u ON u.user_id = gp.user_id
       ${LATEST_MUTABLE_JOIN}
       WHERE  dt.tournament_date = (now() AT TIME ZONE 'UTC')::date
-        AND  gp.score IS NOT NULL
       GROUP BY u.user_id, umd.name, u.address
     ) t
     ORDER BY rank, user_id
