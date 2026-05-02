@@ -59,8 +59,7 @@ export async function findUserByAddress(address: string): Promise<UserRow | null
 export async function findUserByName(name: string): Promise<UserRow | null> {
   const rows = await sql<Omit<UserRow, 'created_at'>[]>`
     SELECT u.user_id, u.address, u.user_source, u.wallet_info, umd.name, umd.is_banned
-    FROM   user_mutable_data umd
-    JOIN   users u ON u.user_id = umd.user_id
+    FROM   users u
     ${LATEST_MUTABLE_JOIN}
     WHERE  umd.name = ${name}
   `;
