@@ -3,7 +3,7 @@ import { validator } from 'hono/validator';
 import { parseEventLogs, toHex } from 'viem';
 import { z } from 'zod';
 import blockFallGameAbi from '../../abis/blockfall-game.abi.ts';
-import { blockFallGameContractAddress } from '../../constants.ts';
+import { BLOCKFALL_GAME_ADDRESS } from '../../constants.ts';
 import { findPayoutByActionId, processClaim } from '../../db/payouts.ts';
 import { findTransactionByHash } from '../../db/purchases.ts';
 import { findUserByAddress } from '../../db/users.ts';
@@ -56,7 +56,7 @@ export const userClaimsRoutes = new Hono<AuthEnv>()
       }
 
       // 4. Verify the transaction was sent to our contract
-      if (receipt.to?.toLowerCase() !== blockFallGameContractAddress.toLowerCase()) {
+      if (receipt.to?.toLowerCase() !== BLOCKFALL_GAME_ADDRESS.toLowerCase()) {
         return c.json({ error: 'Transaction is not for the BlockFallGame contract' }, 400);
       }
 

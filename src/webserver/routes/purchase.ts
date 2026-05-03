@@ -1,9 +1,9 @@
 import { Hono } from 'hono';
 import { validator } from 'hono/validator';
-import { parseEventLogs } from 'viem';
+import { formatUnits, parseEventLogs } from 'viem';
 import { z } from 'zod';
 import blockFallGameAbi from '../../abis/blockfall-game.abi.ts';
-import { blockFallGameContractAddress } from '../../constants.ts';
+import { BLOCKFALL_GAME_ADDRESS, PAYMENT_TOKENS } from '../../constants.ts';
 import { findTransactionByHash, processPurchase } from '../../db/purchases.ts';
 import { findUserByAddress } from '../../db/users.ts';
 import { getBlock, getTransactionReceipt } from '../../utils/celo-rpc-reader.ts';
@@ -57,7 +57,7 @@ export const purchaseRoutes = new Hono<AuthEnv>()
       }
 
       // 4. Verify the transaction was sent to our contract
-      if (receipt.to?.toLowerCase() !== blockFallGameContractAddress.toLowerCase()) {
+      if (receipt.to?.toLowerCase() !== BLOCKFALL_GAME_ADDRESS.toLowerCase()) {
         return c.json({ error: 'Transaction is not for the BlockFallGame contract' }, 400);
       }
 
@@ -99,11 +99,16 @@ export const purchaseRoutes = new Hono<AuthEnv>()
         price,
       };
 
+      const paymentToken = Object.values(PAYMENT_TOKENS).find(
+        (t) => t.address.toLowerCase() === event.args.paymentToken.toLowerCase()
+      );
+      const revenue = paymentToken ? formatUnits(event.args.price, paymentToken.decimals) : '0';
+
       const result = await processPurchase(
         user.user_id,
         tx_hash,
         txTime,
-        price,
+        revenue,
         itemTypeId,
         eventParams
       );
