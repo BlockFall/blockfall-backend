@@ -76,7 +76,8 @@ const GAME_PLAY_MAX_DURATION_MS = 15 * 60 * 1000;
 /**
  * Sums durations of all pause→resume intervals for a game play. If the last
  * pause has no matching resume, that interval extends to now() (the user is
- * still paused at end-of-game).
+ * still paused at end-of-game). Caller should flush the in-memory event
+ * buffer first so recent pause/resume events are visible.
  */
 async function getPausedDurationMs(gamePlayId: string): Promise<number> {
   const rows = await sql<{ paused_ms: string }[]>`
@@ -118,6 +119,7 @@ export async function endGamePlay(
   score: number
 ): Promise<GamePlayResultRow | null> {
   const startedAt = dateFromId(gamePlayId);
+  await flushIngameEvents();
   const pausedMs = await getPausedDurationMs(gamePlayId);
   if (Date.now() - startedAt.getTime() - pausedMs > GAME_PLAY_MAX_DURATION_MS) {
     return null;
@@ -158,48 +160,102 @@ export async function endGamePlay(
   return rows?.[0] ?? null;
 }
 
-export interface IngameEventRow {
+// ---------------------------------------------------------------------------
+// In-game events: buffered batch insert
+//
+// The /game/event endpoint is high-frequency (pause, resume, line_clear, …),
+// so we don't write per-request. Events are pushed into an in-memory buffer
+// and flushed by a 1s timer (see index.ts)
+// ---------------------------------------------------------------------------
+
+interface BufferedIngameEvent {
   event_id: string;
   game_play_id: string;
+  user_id: string;
   event_time: Date;
   event_type: string;
   intval: number | null;
   textval: string | null;
-  extra_data: unknown;
+  extra_data_json: string | null;
 }
 
-/**
- * Inserts an in-game analytics event. Verifies the game_play exists, belongs
- * to the given user, and has not yet ended. Returns the inserted row, or
- * null if those checks fail.
- */
-export async function insertIngameEvent(
+let ingameEventBuffer: BufferedIngameEvent[] = [];
+let flushInFlight: Promise<void> | null = null;
+
+export function bufferIngameEvent(
   gamePlayId: string,
   userId: string,
   eventType: string,
   intval: number | null,
   textval: string | null,
   extraData: unknown
-): Promise<IngameEventRow | null> {
-  const eventId = generateId().toString();
-  const extraJson = extraData === null || extraData === undefined ? null : JSON.stringify(extraData);
+): { event_id: string; event_time: Date } {
+  const event_id = generateId().toString();
+  const event_time = new Date();
+  ingameEventBuffer.push({
+    event_id,
+    game_play_id: gamePlayId,
+    user_id: userId,
+    event_time,
+    event_type: eventType,
+    intval,
+    textval,
+    extra_data_json:
+      extraData === null || extraData === undefined ? null : JSON.stringify(extraData),
+  });
+  return { event_id, event_time };
+}
 
-  const inserted = await sql<IngameEventRow[]>`
-    INSERT INTO game_ingame_events (event_id, game_play_id, event_time, event_type, intval, textval, extra_data)
-    SELECT ${eventId}, ${gamePlayId}, now(), ${eventType}, ${intval}, ${textval}, ${extraJson}::jsonb
-    WHERE EXISTS (
-      SELECT 1 FROM game_plays
-      WHERE game_play_id = ${gamePlayId}
-        AND user_id = ${userId}
-    )
-    AND NOT EXISTS (
-      SELECT 1 FROM game_play_results
-      WHERE game_play_id = ${gamePlayId}
-    )
-    RETURNING event_id, game_play_id, event_time, event_type, intval, textval, extra_data
-  `;
+async function doFlushIngameEvents(): Promise<void> {
+  if (ingameEventBuffer.length === 0) return;
+  const batch = ingameEventBuffer;
+  ingameEventBuffer = [];
 
-  return inserted[0] ?? null;
+  try {
+    await sql`
+      INSERT INTO game_ingame_events (event_id, game_play_id, event_time, event_type, intval, textval, extra_data)
+      SELECT t.event_id::bigint,
+             t.game_play_id::bigint,
+             t.event_time::timestamptz,
+             t.event_type,
+             t.intval::int,
+             t.textval,
+             t.extra_data::jsonb
+      FROM   UNNEST(
+               ${batch.map((e) => e.event_id)}::text[],
+               ${batch.map((e) => e.game_play_id)}::text[],
+               ${batch.map((e) => e.user_id)}::text[],
+               ${batch.map((e) => e.event_time)}::timestamptz[],
+               ${batch.map((e) => e.event_type)}::text[],
+               ${batch.map((e) => e.intval)}::int[],
+               ${batch.map((e) => e.textval)}::text[],
+               ${batch.map((e) => e.extra_data_json)}::text[]
+             ) AS t(event_id, game_play_id, user_id, event_time, event_type, intval, textval, extra_data)
+      WHERE  EXISTS (
+               SELECT 1 FROM game_plays gp
+               WHERE  gp.game_play_id = t.game_play_id::bigint
+                 AND  gp.user_id      = t.user_id::bigint
+             )
+        AND  NOT EXISTS (
+               SELECT 1 FROM game_play_results gpr
+               WHERE  gpr.game_play_id = t.game_play_id::bigint
+             )
+    `;
+  } catch (err) {
+    console.error('flush ingame events failed:', err);
+  }
+}
+
+/**
+ * Flushes the in-game event buffer. Concurrent calls share a single in-flight
+ * flush so the bulk insert never overlaps itself.
+ */
+export function flushIngameEvents(): Promise<void> {
+  if (flushInFlight) return flushInFlight;
+  flushInFlight = doFlushIngameEvents().finally(() => {
+    flushInFlight = null;
+  });
+  return flushInFlight;
 }
 
 /**

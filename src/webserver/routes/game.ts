@@ -2,9 +2,9 @@ import { Hono } from 'hono';
 import { validator } from 'hono/validator';
 import { z } from 'zod';
 import {
+  bufferIngameEvent,
   endGamePlay,
   getOrCreateTodayTournament,
-  insertIngameEvent,
   startGamePlay,
 } from '../../db/game-plays.ts';
 import { findUserByAddress } from '../../db/users.ts';
@@ -108,7 +108,9 @@ export const gameRoutes = new Hono<AuthEnv>()
         return c.json({ error: 'User not found' }, 404);
       }
 
-      const event = await insertIngameEvent(
+      // Buffered: returns immediately. Ownership and not-yet-ended checks are
+      // applied at flush time (every ~1s) — bad rows are silently dropped.
+      const { event_id, event_time } = bufferIngameEvent(
         game_play_id,
         user.user_id,
         event_type,
@@ -117,13 +119,6 @@ export const gameRoutes = new Hono<AuthEnv>()
         extra_data ?? null
       );
 
-      if (!event) {
-        return c.json({ error: 'Invalid game play: not found, not yours, or already ended' }, 400);
-      }
-
-      return c.json({
-        event_id: event.event_id,
-        event_time: event.event_time,
-      });
+      return c.json({ event_id, event_time });
     }
   );
