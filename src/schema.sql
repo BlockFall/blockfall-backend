@@ -2,6 +2,9 @@
 -- Blockfall Backend – PostgreSQL Schema
 -- ============================================================
 
+-- Insert only design, no updates or deletes (except for user_numbers and user_active_boost)
+-- All IDs are k-orderd 63 bit (42-bit ms timestamp | 21-bit random)
+
 -- Users (no-update)
 CREATE TABLE users (
     user_id      BIGINT      PRIMARY KEY,
@@ -17,17 +20,6 @@ CREATE TABLE user_mutable_data (
     name            TEXT      NOT NULL CHECK (char_length(name) >= 3 AND char_length(name) <= 50),
     is_banned       BOOLEAN   NOT NULL DEFAULT FALSE
 );
-
--- Per-user stats (high-churn row → HOT-update friendly)
-CREATE TABLE user_numbers (
-    user_id      BIGINT  PRIMARY KEY REFERENCES users(user_id),
-    best_score   INT     NOT NULL DEFAULT 0 CHECK (best_score   >= 0),
-    last_score   INT     NOT NULL DEFAULT 0 CHECK (last_score   >= 0),
-    games_played INT     NOT NULL DEFAULT 0 CHECK (games_played >= 0),
-    energy       INT     NOT NULL DEFAULT 0 CHECK (energy       >= 0),
-    total_score  BIGINT  NOT NULL DEFAULT 0 CHECK (total_score  >= 0),
-    updated_at   TIMESTAMPTZ
-) WITH (fillfactor = 80);
 
 -- Daily tournaments (no-update)
 CREATE TABLE daily_tournaments (
@@ -69,7 +61,7 @@ CREATE TABLE game_ingame_events (
     extra_data         JSONB
 );
 
--- Daily check-ins (one per user per date enforced)
+-- Daily check-ins (no-update) (one per user per date enforced)
 CREATE TABLE daily_checkins (
     check_in_id   BIGINT      PRIMARY KEY,
     user_id       BIGINT      NOT NULL REFERENCES users(user_id),
@@ -113,16 +105,7 @@ CREATE TABLE user_item_usages (
     usage_date     TIMESTAMPTZ  NOT NULL
 );
 
--- User Boosts (no record if no active boost)
-CREATE TABLE user_active_boost (
-    user_id     BIGINT      PRIMARY KEY REFERENCES users(user_id),
-    item_id     BIGINT      NOT NULL REFERENCES user_items(item_id),
-    multiplier  INT         NOT NULL CHECK (multiplier > 1), -- used divided by 100 in calculations (e.g. 150 for 1.5x boost)
-    started_at  TIMESTAMPTZ NOT NULL,
-    expires_at  TIMESTAMPTZ NOT NULL
-);
-
--- Reward payouts
+-- Reward payouts (no-update)
 CREATE TABLE user_payouts (
     payout_id            BIGINT      PRIMARY KEY,
     user_id              BIGINT      NOT NULL REFERENCES users(user_id),
@@ -131,18 +114,42 @@ CREATE TABLE user_payouts (
     amount               NUMERIC     NOT NULL,
     payment_token        SMALLINT    NOT NULL, -- 1=USDT, 2=USDC, 3=USDm
     signature            TEXT        NOT NULL,
-    daily_tournament_id  BIGINT      REFERENCES daily_tournaments(daily_tournament_id), -- for daily rewards
-    claim_transaction_id BIGINT      REFERENCES user_transactions(transaction_id),
-    claim_date           TIMESTAMPTZ
+    daily_tournament_id  BIGINT      REFERENCES daily_tournaments(daily_tournament_id) -- for daily rewards
 );
 
--- Daily total scores
+-- User claims (no-update) (one-to-one with payouts, enforced by PK/FK)
+CREATE TABLE user_claims (
+    payout_id            BIGINT   PRIMARY KEY REFERENCES user_payouts(payout_id),
+    claim_transaction_id BIGINT   NOT NULL REFERENCES user_transactions(transaction_id)
+);
+
+-- Daily total scores (no-update)
 CREATE TABLE daily_total_scores (
   user_id        BIGINT   NOT NULL REFERENCES users(user_id),
   score_date     DATE     NOT NULL,
   total_score    INT      NOT NULL CHECK (total_score >= 0),
   rank           INT      NOT NULL CHECK (rank > 0),
   PRIMARY KEY (user_id, score_date)
+);
+
+-- Per-user stats (updateable) (recreateable summary) (high-churn row → HOT-update friendly)
+CREATE TABLE user_numbers (
+    user_id      BIGINT  PRIMARY KEY REFERENCES users(user_id),
+    best_score   INT     NOT NULL DEFAULT 0 CHECK (best_score   >= 0),
+    last_score   INT     NOT NULL DEFAULT 0 CHECK (last_score   >= 0),
+    games_played INT     NOT NULL DEFAULT 0 CHECK (games_played >= 0),
+    energy       INT     NOT NULL DEFAULT 0 CHECK (energy       >= 0),
+    total_score  BIGINT  NOT NULL DEFAULT 0 CHECK (total_score  >= 0),
+    updated_at   TIMESTAMPTZ
+) WITH (fillfactor = 80);
+
+-- User Boost information (updateable) (recreateable summary) (no record if no active boost)
+CREATE TABLE user_active_boost (
+    user_id     BIGINT      PRIMARY KEY REFERENCES users(user_id),
+    item_id     BIGINT      NOT NULL REFERENCES user_items(item_id),
+    multiplier  INT         NOT NULL CHECK (multiplier > 1), -- used divided by 100 in calculations (e.g. 150 for 1.5x boost)
+    started_at  TIMESTAMPTZ NOT NULL,
+    expires_at  TIMESTAMPTZ NOT NULL
 );
 
 -- ============================================================

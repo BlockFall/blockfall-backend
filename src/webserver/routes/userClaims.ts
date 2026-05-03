@@ -91,7 +91,7 @@ export const userClaimsRoutes = new Hono<AuthEnv>()
         return c.json({ error: 'Payout does not belong to authenticated user' }, 403);
       }
 
-      if (payout.claim_date !== null || payout.claim_transaction_id !== null) {
+      if (payout.claim_transaction_id !== null) {
         return c.json({ error: 'Payout already claimed' }, 409);
       }
 

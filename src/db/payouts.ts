@@ -19,7 +19,6 @@ export interface PayoutForClaimRow {
   user_id: string;
   amount: string;
   payment_token: number;
-  claim_date: Date | null;
   claim_transaction_id: string | null;
 }
 
@@ -29,19 +28,20 @@ export interface PayoutForClaimRow {
 
 export async function getPendingPayouts(userId: string): Promise<PendingPayoutRow[]> {
   return sql<PendingPayoutRow[]>`
-    SELECT payout_id, payout_type, action_id, amount, payment_token, signature
-    FROM   user_payouts
-    WHERE  user_id = ${userId}
-      AND  claim_date IS NULL
-    ORDER BY payout_id
+    SELECT p.payout_id, p.payout_type, p.action_id, p.amount, p.payment_token, p.signature
+    FROM   user_payouts p
+    WHERE  p.user_id = ${userId}
+      AND  NOT EXISTS (SELECT 1 FROM user_claims c WHERE c.payout_id = p.payout_id)
+    ORDER BY p.payout_id
   `;
 }
 
 export async function findPayoutByActionId(actionId: string): Promise<PayoutForClaimRow | null> {
   const rows = await sql<PayoutForClaimRow[]>`
-    SELECT payout_id, user_id, amount, payment_token, claim_date, claim_transaction_id
-    FROM   user_payouts
-    WHERE  action_id = ${actionId}
+    SELECT p.payout_id, p.user_id, p.amount, p.payment_token, c.claim_transaction_id
+    FROM   user_payouts p
+    LEFT JOIN user_claims c ON c.payout_id = p.payout_id
+    WHERE  p.action_id = ${actionId}
   `;
   return rows[0] ?? null;
 }
@@ -49,9 +49,9 @@ export async function findPayoutByActionId(actionId: string): Promise<PayoutForC
 /**
  * Processes a claim transaction. Transactionally:
  * 1. Inserts into user_transactions (revenue = 0)
- * 2. Updates user_payouts with claim_transaction_id and claim_date
+ * 2. Inserts into user_claims
  *
- * Uses a conditional UPDATE to guard against concurrent double-claims.
+ * Relies on the user_claims PK to guard against concurrent double-claims.
  */
 export async function processClaim(
   userId: string,
@@ -62,24 +62,24 @@ export async function processClaim(
 ): Promise<{ transaction_id: string }> {
   const transactionId = generateId().toString();
 
-  await sql.begin(async (tx) => {
-    await tx`
-      INSERT INTO user_transactions (transaction_id, user_id, tx_hash, tx_time, revenue, event_params)
-      VALUES (${transactionId}, ${userId}, ${txHash}, ${txTime}, 0, ${JSON.stringify(eventParams)})
-    `;
+  try {
+    await sql.begin(async (tx) => {
+      await tx`
+        INSERT INTO user_transactions (transaction_id, user_id, tx_hash, tx_time, revenue, event_params)
+        VALUES (${transactionId}, ${userId}, ${txHash}, ${txTime}, 0, ${JSON.stringify(eventParams)})
+      `;
 
-    const updated = await tx`
-      UPDATE user_payouts
-      SET    claim_transaction_id = ${transactionId},
-             claim_date           = ${txTime}
-      WHERE  payout_id  = ${payoutId}
-        AND  claim_date IS NULL
-    `;
-
-    if (updated.count === 0) {
-      throw new Error('Payout already claimed');
+      await tx`
+        INSERT INTO user_claims (payout_id, claim_transaction_id)
+        VALUES (${payoutId}, ${transactionId})
+      `;
+    });
+  } catch (err) {
+    if (err instanceof Error && 'code' in err && (err as { code: string }).code === '23505') {
+      throw new Error('Payout already claimed', { cause: err });
     }
-  });
+    throw err;
+  }
 
   return { transaction_id: transactionId };
 }
