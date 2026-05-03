@@ -30,8 +30,8 @@ const DAILY_CHECK_IN_ENERGY = 1;
  */
 export async function getLastSevenDayCheckins(userId: string): Promise<CheckInDayRow[]> {
   return sql<CheckInDayRow[]>`
-    SELECT to_char(d::date, 'YYYY-MM-DD')                         AS date,
-           (c.check_in_date IS NOT NULL)                          AS checked_in
+    SELECT to_char(d::date, 'YYYY-MM-DD')   AS date,
+           (c.check_in_date IS NOT NULL)    AS checked_in
     FROM   generate_series(
              (now() AT TIME ZONE 'UTC')::date - INTERVAL '6 days',
              (now() AT TIME ZONE 'UTC')::date,

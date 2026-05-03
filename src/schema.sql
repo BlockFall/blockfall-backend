@@ -74,29 +74,27 @@ CREATE TABLE daily_checkins (
     check_in_id   BIGINT      PRIMARY KEY,
     user_id       BIGINT      NOT NULL REFERENCES users(user_id),
     check_in_date DATE        NOT NULL,
-    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (user_id, check_in_date)
 );
 
--- On-chain transactions
+-- On-chain transactions (no-update) (revenue is present for buy transactions, otherwise 0)
 CREATE TABLE user_transactions (
     transaction_id BIGINT      PRIMARY KEY,
     user_id        BIGINT      NOT NULL REFERENCES users(user_id),
-    tx_hash        TEXT        NOT NULL UNIQUE,
-    tx_time        TIMESTAMPTZ NOT NULL,
+    tx_hash        TEXT        NOT NULL UNIQUE, -- uint256 as hex string
+    tx_time        TIMESTAMPTZ NOT NULL, -- from block timestamp
     revenue        NUMERIC     NOT NULL DEFAULT 0 CHECK (revenue >= 0),
     event_params   JSONB       NOT NULL
 );
 
--- Energy issuance events
+-- Energy issuance events (no-update)
 CREATE TABLE energy_issuance (
     energy_issuance_id BIGINT      PRIMARY KEY,
     user_id            BIGINT      NOT NULL REFERENCES users(user_id),
     issuance_type      TEXT        NOT NULL CHECK (issuance_type IN ('signup', 'daily_check_in', 'buy_package', 'mystery_box')),
     amount             INT         NOT NULL CHECK (amount > 0),
     check_in_id        BIGINT      REFERENCES daily_checkins(check_in_id),
-    transaction_id     BIGINT      REFERENCES user_transactions(transaction_id),
-    created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+    transaction_id     BIGINT      REFERENCES user_transactions(transaction_id)
 );
 
 -- Inventory items
