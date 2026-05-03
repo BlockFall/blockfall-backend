@@ -97,15 +97,20 @@ CREATE TABLE energy_issuance (
     transaction_id     BIGINT      REFERENCES user_transactions(transaction_id)
 );
 
--- Inventory items
+-- Inventory items (no-update)
 CREATE TABLE user_items (
     item_id               BIGINT      PRIMARY KEY,
     user_id               BIGINT      NOT NULL REFERENCES users(user_id),
     item_type             INT         NOT NULL,
     acquisition_type      TEXT        NOT NULL CHECK (acquisition_type IN ('buy_package', 'mystery_box', 'daily_check_in')),
-    buy_date              TIMESTAMPTZ,
-    usage_date            TIMESTAMPTZ,
+    buy_transaction_id    BIGINT      REFERENCES user_transactions(transaction_id),
     source_mystery_box_id BIGINT      REFERENCES user_items(item_id)
+);
+
+-- Item usage records (no-update) (one per item, only for used items)
+CREATE TABLE user_item_usages (
+    item_id        BIGINT       PRIMARY KEY REFERENCES user_items(item_id),
+    usage_date     TIMESTAMPTZ  NOT NULL
 );
 
 -- User Boosts (no record if no active boost)

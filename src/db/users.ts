@@ -105,17 +105,20 @@ export interface UserItemRow {
   item_id: string;
   item_type: number;
   acquisition_type: string;
-  buy_date: Date | null;
+  acquisition_date: Date;
 }
 
 export async function getUserInventory(userId: string): Promise<UserItemRow[]> {
-  return sql<UserItemRow[]>`
-    SELECT item_id, item_type, acquisition_type, buy_date
-    FROM   user_items
-    WHERE  user_id = ${userId}
-      AND  usage_date IS NULL
-    ORDER BY buy_date DESC
+  const rows = await sql<Omit<UserItemRow, 'acquisition_date'>[]>`
+    SELECT i.item_id, i.item_type, i.acquisition_type
+    FROM   user_items i
+    WHERE  i.user_id = ${userId}
+      AND  NOT EXISTS (
+        SELECT 1 FROM user_item_usages u WHERE u.item_id = i.item_id
+      )
+    ORDER BY i.item_id DESC
   `;
+  return rows.map((r) => ({ ...r, acquisition_date: dateFromId(r.item_id) }));
 }
 
 const SIGNUP_ENERGY = 10;

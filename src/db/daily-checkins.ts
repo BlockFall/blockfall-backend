@@ -103,8 +103,8 @@ export async function performDailyCheckin(userId: string): Promise<CheckInResult
     if (streak > 0 && streak % 7 === 0) {
       mysteryBoxItemId = generateId().toString();
       await tx`
-        INSERT INTO user_items (item_id, user_id, item_type, acquisition_type, buy_date)
-        VALUES (${mysteryBoxItemId}, ${userId}, ${MYSTERY_BOX_ITEM_TYPE}, 'daily_check_in', now())
+        INSERT INTO user_items (item_id, user_id, item_type, acquisition_type)
+        VALUES (${mysteryBoxItemId}, ${userId}, ${MYSTERY_BOX_ITEM_TYPE}, 'daily_check_in')
       `;
     }
 

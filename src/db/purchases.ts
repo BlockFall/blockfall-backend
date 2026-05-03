@@ -58,8 +58,8 @@ export async function processPurchase(
       // 2b. Mystery box — add item
       const itemId = generateId().toString();
       await tx`
-        INSERT INTO user_items (item_id, user_id, item_type, acquisition_type, buy_date)
-        VALUES (${itemId}, ${userId}, ${MYSTERY_BOX_ITEM_TYPE}, 'buy_package', now())
+        INSERT INTO user_items (item_id, user_id, item_type, acquisition_type, buy_transaction_id)
+        VALUES (${itemId}, ${userId}, ${MYSTERY_BOX_ITEM_TYPE}, 'buy_package', ${transactionId})
       `;
     }
   });
