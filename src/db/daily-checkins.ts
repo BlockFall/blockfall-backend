@@ -1,5 +1,4 @@
 import { MYSTERY_BOX_ITEM_TYPE } from '../constants.ts';
-import { generateId } from '../utils/index.ts';
 import { sql } from './index.ts';
 
 // ---------------------------------------------------------------------------
@@ -54,13 +53,10 @@ export async function getLastSevenDayCheckins(userId: string): Promise<CheckInDa
  * Returns null if the user has already checked in today.
  */
 export async function performDailyCheckin(userId: string): Promise<CheckInResult | null> {
-  const checkInId = generateId().toString();
-  const issuanceId = generateId().toString();
-
   return sql.begin<CheckInResult | null>(async (tx) => {
     const inserted = await tx<{ check_in_id: string }[]>`
-      INSERT INTO daily_checkins (check_in_id, user_id, check_in_date)
-      VALUES (${checkInId}, ${userId}, (now() AT TIME ZONE 'UTC')::date)
+      INSERT INTO daily_checkins (user_id, check_in_date)
+      VALUES (${userId}, (now() AT TIME ZONE 'UTC')::date)
       ON CONFLICT (user_id, check_in_date) DO NOTHING
       RETURNING check_in_id
     `;
@@ -68,10 +64,12 @@ export async function performDailyCheckin(userId: string): Promise<CheckInResult
     if (inserted.length === 0) {
       return null;
     }
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const checkInId = inserted[0]!.check_in_id;
 
     await tx`
-      INSERT INTO energy_issuance (energy_issuance_id, user_id, issuance_type, amount, check_in_id)
-      VALUES (${issuanceId}, ${userId}, 'daily_check_in', ${DAILY_CHECK_IN_ENERGY}, ${checkInId})
+      INSERT INTO energy_issuance (user_id, issuance_type, amount, check_in_id)
+      VALUES (${userId}, 'daily_check_in', ${DAILY_CHECK_IN_ENERGY}, ${checkInId})
     `;
 
     await tx`
@@ -101,11 +99,13 @@ export async function performDailyCheckin(userId: string): Promise<CheckInResult
 
     let mysteryBoxItemId: string | null = null;
     if (streak > 0 && streak % 7 === 0) {
-      mysteryBoxItemId = generateId().toString();
-      await tx`
-        INSERT INTO user_items (item_id, user_id, item_type, acquisition_type)
-        VALUES (${mysteryBoxItemId}, ${userId}, ${MYSTERY_BOX_ITEM_TYPE}, 'daily_check_in')
+      const itemRows = await tx<{ item_id: string }[]>`
+        INSERT INTO user_items (user_id, item_type, acquisition_type)
+        VALUES (${userId}, ${MYSTERY_BOX_ITEM_TYPE}, 'daily_check_in')
+        RETURNING item_id
       `;
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      mysteryBoxItemId = itemRows[0]!.item_id;
     }
 
     return {

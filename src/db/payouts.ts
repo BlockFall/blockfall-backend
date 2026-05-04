@@ -1,4 +1,3 @@
-import { generateId } from '../utils/index.ts';
 import { sql } from './index.ts';
 
 // ---------------------------------------------------------------------------
@@ -60,19 +59,22 @@ export async function processClaim(
   txTime: Date,
   eventParams: object
 ): Promise<{ transaction_id: string }> {
-  const transactionId = generateId().toString();
-
   try {
-    await sql.begin(async (tx) => {
-      await tx`
-        INSERT INTO user_transactions (transaction_id, user_id, tx_hash, tx_time, revenue, event_params)
-        VALUES (${transactionId}, ${userId}, ${txHash}, ${txTime}, 0, ${JSON.stringify(eventParams)})
+    return await sql.begin(async (tx) => {
+      const txRows = await tx<{ transaction_id: string }[]>`
+        INSERT INTO user_transactions (user_id, tx_hash, tx_time, revenue, event_params)
+        VALUES (${userId}, ${txHash}, ${txTime}, 0, ${JSON.stringify(eventParams)})
+        RETURNING transaction_id
       `;
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      const transactionId = txRows[0]!.transaction_id;
 
       await tx`
         INSERT INTO user_claims (payout_id, claim_transaction_id)
         VALUES (${payoutId}, ${transactionId})
       `;
+
+      return { transaction_id: transactionId };
     });
   } catch (err) {
     if (err instanceof Error && 'code' in err && (err as { code: string }).code === '23505') {
@@ -80,6 +82,4 @@ export async function processClaim(
     }
     throw err;
   }
-
-  return { transaction_id: transactionId };
 }

@@ -1,5 +1,4 @@
 import { ENERGY_BY_ITEM_TYPE, MYSTERY_BOX_ITEM_TYPE } from '../constants.ts';
-import { generateId } from '../utils/index.ts';
 import { sql } from './index.ts';
 
 // ---------------------------------------------------------------------------
@@ -30,23 +29,23 @@ export async function processPurchase(
   itemTypeId: number,
   eventParams: object
 ): Promise<{ transaction_id: string }> {
-  const transactionId = generateId().toString();
-
-  await sql.begin(async (tx) => {
+  return sql.begin(async (tx) => {
     // 1. Save transaction
-    await tx`
-      INSERT INTO user_transactions (transaction_id, user_id, tx_hash, tx_time, revenue, event_params)
-      VALUES (${transactionId}, ${userId}, ${txHash}, ${txTime}, ${revenue}, ${JSON.stringify(eventParams)})
+    const txRows = await tx<{ transaction_id: string }[]>`
+      INSERT INTO user_transactions (user_id, tx_hash, tx_time, revenue, event_params)
+      VALUES (${userId}, ${txHash}, ${txTime}, ${revenue}, ${JSON.stringify(eventParams)})
+      RETURNING transaction_id
     `;
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const transactionId = txRows[0]!.transaction_id;
 
     const energyAmount = ENERGY_BY_ITEM_TYPE[itemTypeId];
 
     if (energyAmount) {
       // 2a. Energy package — issue energy
-      const issuanceId = generateId().toString();
       await tx`
-        INSERT INTO energy_issuance (energy_issuance_id, user_id, issuance_type, amount, transaction_id)
-        VALUES (${issuanceId}, ${userId}, 'buy_package', ${energyAmount}, ${transactionId})
+        INSERT INTO energy_issuance (user_id, issuance_type, amount, transaction_id)
+        VALUES (${userId}, 'buy_package', ${energyAmount}, ${transactionId})
       `;
       await tx`
         UPDATE user_numbers
@@ -56,13 +55,12 @@ export async function processPurchase(
       `;
     } else if (itemTypeId === MYSTERY_BOX_ITEM_TYPE) {
       // 2b. Mystery box — add item
-      const itemId = generateId().toString();
       await tx`
-        INSERT INTO user_items (item_id, user_id, item_type, acquisition_type, buy_transaction_id)
-        VALUES (${itemId}, ${userId}, ${MYSTERY_BOX_ITEM_TYPE}, 'buy_package', ${transactionId})
+        INSERT INTO user_items (user_id, item_type, acquisition_type, buy_transaction_id)
+        VALUES (${userId}, ${MYSTERY_BOX_ITEM_TYPE}, 'buy_package', ${transactionId})
       `;
     }
-  });
 
-  return { transaction_id: transactionId };
+    return { transaction_id: transactionId };
+  });
 }

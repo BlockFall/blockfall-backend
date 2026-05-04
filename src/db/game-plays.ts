@@ -1,4 +1,4 @@
-import { dateFromId, generateId } from '../utils/index.ts';
+import { dateFromId } from '../utils/index.ts';
 import { sql } from './index.ts';
 
 // ---------------------------------------------------------------------------
@@ -31,8 +31,6 @@ export interface GamePlayResultRow {
  * Returns the new game play row, or null if energy is 0.
  */
 export async function startGamePlay(userId: string, dayId: string): Promise<GamePlayRow | null> {
-  const gamePlayId = generateId().toString();
-
   const rows = await sql.begin(async (tx) => {
     // Decrement energy and increment games_played atomically;
     // the WHERE energy > 0 prevents going below zero.
@@ -51,9 +49,8 @@ export async function startGamePlay(userId: string, dayId: string): Promise<Game
     }
 
     const inserted = await tx<GamePlayRow[]>`
-      INSERT INTO game_plays (game_play_id, user_id, daily_tournament_id, boost_multiplier)
+      INSERT INTO game_plays (user_id, daily_tournament_id, boost_multiplier)
       VALUES (
-        ${gamePlayId},
         ${userId},
         ${dayId},
         COALESCE(
@@ -169,7 +166,6 @@ export async function endGamePlay(
 // ---------------------------------------------------------------------------
 
 interface BufferedIngameEvent {
-  event_id: string;
   game_play_id: string;
   user_id: string;
   event_time: Date;
@@ -189,11 +185,9 @@ export function bufferIngameEvent(
   intval: number | null,
   textval: string | null,
   extraData: unknown
-): { event_id: string; event_time: Date } {
-  const event_id = generateId().toString();
+): { event_time: Date } {
   const event_time = new Date();
   ingameEventBuffer.push({
-    event_id,
     game_play_id: gamePlayId,
     user_id: userId,
     event_time,
@@ -203,7 +197,7 @@ export function bufferIngameEvent(
     extra_data_json:
       extraData === null || extraData === undefined ? null : JSON.stringify(extraData),
   });
-  return { event_id, event_time };
+  return { event_time };
 }
 
 async function doFlushIngameEvents(): Promise<void> {
@@ -213,16 +207,14 @@ async function doFlushIngameEvents(): Promise<void> {
 
   try {
     await sql`
-      INSERT INTO game_ingame_events (event_id, game_play_id, event_time, event_type, intval, textval, extra_data)
-      SELECT t.event_id::bigint,
-             t.game_play_id::bigint,
+      INSERT INTO game_ingame_events (game_play_id, event_time, event_type, intval, textval, extra_data)
+      SELECT t.game_play_id::bigint,
              t.event_time::timestamptz,
              t.event_type,
              t.intval::int,
              t.textval,
              t.extra_data::jsonb
       FROM   UNNEST(
-               ${batch.map((e) => e.event_id)}::text[],
                ${batch.map((e) => e.game_play_id)}::text[],
                ${batch.map((e) => e.user_id)}::text[],
                ${batch.map((e) => e.event_time)}::timestamptz[],
@@ -230,7 +222,7 @@ async function doFlushIngameEvents(): Promise<void> {
                ${batch.map((e) => e.intval)}::int[],
                ${batch.map((e) => e.textval)}::text[],
                ${batch.map((e) => e.extra_data_json)}::text[]
-             ) AS t(event_id, game_play_id, user_id, event_time, event_type, intval, textval, extra_data)
+             ) AS t(game_play_id, user_id, event_time, event_type, intval, textval, extra_data)
       WHERE  EXISTS (
                SELECT 1 FROM game_plays gp
                WHERE  gp.game_play_id = t.game_play_id::bigint
@@ -272,10 +264,9 @@ export async function getOrCreateTodayTournament(): Promise<string> {
     return existing[0].daily_tournament_id;
   }
 
-  const tournamentId = generateId().toString();
   await sql`
-    INSERT INTO daily_tournaments (daily_tournament_id, tournament_date)
-    VALUES (${tournamentId}, (now() AT TIME ZONE 'UTC')::date)
+    INSERT INTO daily_tournaments (tournament_date)
+    VALUES ((now() AT TIME ZONE 'UTC')::date)
     ON CONFLICT (tournament_date) DO NOTHING
   `;
 

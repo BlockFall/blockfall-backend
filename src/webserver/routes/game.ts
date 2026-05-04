@@ -81,7 +81,7 @@ export const gameRoutes = new Hono<AuthEnv>()
   )
 
   // POST /game/event — record an in-game analytics event (pause, resume,
-  // line_clear, etc.). event_id and event_time are server-generated.
+  // line_clear, etc.). event_time is server-generated.
   .post(
     '/event',
     validator('json', (value, c) => {
@@ -110,7 +110,7 @@ export const gameRoutes = new Hono<AuthEnv>()
 
       // Buffered: returns immediately. Ownership and not-yet-ended checks are
       // applied at flush time (every ~1s) — bad rows are silently dropped.
-      const { event_id, event_time } = bufferIngameEvent(
+      const { event_time } = bufferIngameEvent(
         game_play_id,
         user.user_id,
         event_type,
@@ -119,6 +119,6 @@ export const gameRoutes = new Hono<AuthEnv>()
         extra_data ?? null
       );
 
-      return c.json({ event_id, event_time });
+      return c.json({ event_time });
     }
   );

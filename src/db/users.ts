@@ -1,4 +1,4 @@
-import { dateFromId, generateId } from '../utils/index.ts';
+import { dateFromId } from '../utils/index.ts';
 import { sql } from './index.ts';
 
 // ---------------------------------------------------------------------------
@@ -140,9 +140,6 @@ export async function createUser(
   userSource: UserSource,
   walletInfo: string
 ): Promise<CreateUserResult> {
-  const userId = generateId().toString();
-  const userChangeId = generateId().toString();
-  const issuanceId = generateId().toString();
   const lowerAddress = address.toLowerCase();
 
   const taken = await sql.begin<boolean>(async (tx) => {
@@ -165,21 +162,25 @@ export async function createUser(
       return true;
     }
 
-    await tx`
-      INSERT INTO users (user_id, address, user_source, wallet_info)
-      VALUES (${userId}, ${lowerAddress}, ${userSource}, ${walletInfo})
+    const userRows = await tx<{ user_id: string }[]>`
+      INSERT INTO users (address, user_source, wallet_info)
+      VALUES (${lowerAddress}, ${userSource}, ${walletInfo})
+      RETURNING user_id
     `;
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const userId = userRows[0]!.user_id;
+
     await tx`
-      INSERT INTO user_mutable_data (user_change_id, user_id, name)
-      VALUES (${userChangeId}, ${userId}, ${name})
+      INSERT INTO user_mutable_data (user_id, name)
+      VALUES (${userId}, ${name})
     `;
     await tx`
       INSERT INTO user_numbers (user_id, energy)
       VALUES (${userId}, ${SIGNUP_ENERGY})
     `;
     await tx`
-      INSERT INTO energy_issuance (energy_issuance_id, user_id, issuance_type, amount)
-      VALUES (${issuanceId}, ${userId}, 'signup', ${SIGNUP_ENERGY})
+      INSERT INTO energy_issuance (user_id, issuance_type, amount)
+      VALUES (${userId}, 'signup', ${SIGNUP_ENERGY})
     `;
     return false;
   });
@@ -205,7 +206,6 @@ export type RenameResult =
  */
 export async function renameUser(address: string, newName: string): Promise<RenameResult> {
   const lowerAddress = address.toLowerCase();
-  const userChangeId = generateId().toString();
 
   return sql.begin<RenameResult>(async (tx) => {
     // Serialize concurrent renames targeting the same name.
@@ -260,8 +260,8 @@ export async function renameUser(address: string, newName: string): Promise<Rena
     const isBanned = latest[0]?.is_banned ?? false;
 
     await tx`
-      INSERT INTO user_mutable_data (user_change_id, user_id, name, is_banned)
-      VALUES (${userChangeId}, ${userId}, ${newName}, ${isBanned})
+      INSERT INTO user_mutable_data (user_id, name, is_banned)
+      VALUES (${userId}, ${newName}, ${isBanned})
     `;
 
     return { success: true };
