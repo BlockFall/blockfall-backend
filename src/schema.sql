@@ -105,7 +105,7 @@ CREATE TABLE user_items (
 CREATE TABLE user_item_usages (
     item_usage_id  BIGINT       DEFAULT generate_id() PRIMARY KEY,
     item_id        BIGINT       NOT NULL UNIQUE REFERENCES user_items(item_id),
-    usage_date     TIMESTAMPTZ  NOT NULL
+    usage_date     TIMESTAMPTZ GENERATED ALWAYS AS (date_from_id(item_usage_id)) STORED
 );
 
 -- Reward payouts (no-update)
