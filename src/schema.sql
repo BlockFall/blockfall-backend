@@ -217,3 +217,28 @@ BEGIN
   RETURN (ms << 21) | rand;
 END;
 $$ LANGUAGE plpgsql IMMUTABLE STRICT PARALLEL SAFE;
+
+
+-- ============================================================
+-- Views
+-- ============================================================
+
+-- Users joined with their latest mutable data + derived created_at.
+-- Use this anywhere a read needs name / is_banned / created_at instead of
+-- repeating the JOIN LATERAL against user_mutable_data.
+CREATE VIEW users_with_data AS
+SELECT u.user_id,
+       u.address,
+       u.user_source,
+       u.wallet_info,
+       umd.name,
+       umd.is_banned,
+       date_from_id(u.user_id) AS created_at
+FROM   users u
+JOIN LATERAL (
+    SELECT name, is_banned
+    FROM   user_mutable_data
+    WHERE  user_id = u.user_id
+    ORDER BY user_change_id DESC
+    LIMIT 1
+) umd ON true;
