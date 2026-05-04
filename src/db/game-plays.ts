@@ -127,8 +127,8 @@ export async function endGamePlay(
     // user and no result row exists yet. PK on game_play_results prevents
     // double-end races.
     const inserted = await tx<GamePlayResultRow[]>`
-      INSERT INTO game_play_results (game_play_id, ended_at, score)
-      SELECT ${gamePlayId}, now(), ${score}
+      INSERT INTO game_play_results (game_play_id, score)
+      SELECT ${gamePlayId}, ${score}
       WHERE EXISTS (
         SELECT 1 FROM game_plays
         WHERE game_play_id = ${gamePlayId}
