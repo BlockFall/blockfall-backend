@@ -4,7 +4,7 @@ import { SignJWT } from 'jose';
 import { SiweMessage, generateNonce } from 'siwe';
 import { z } from 'zod';
 import config from '../../config.ts';
-import { createUser, findUserByAddress, findUserByName } from '../../db/users.ts';
+import { createUser, findUserByName, findUserIdByAddress } from '../../db/users.ts';
 
 // ---------------------------------------------------------------------------
 // Nonce store — one-time use, 5-minute TTL
@@ -154,8 +154,8 @@ export const authRoutes = new Hono()
         return c.json({ error: verified.error }, verified.status);
       }
 
-      const user = await findUserByAddress(verified.address);
-      if (!user) {
+      const user_id = await findUserIdByAddress(verified.address);
+      if (!user_id) {
         return c.json({ error: 'Account not found. Please sign up first.' }, 404);
       }
 
@@ -191,7 +191,7 @@ export const authRoutes = new Hono()
       }
 
       // Guard: address already registered
-      if (await findUserByAddress(verified.address)) {
+      if (await findUserIdByAddress(verified.address)) {
         return c.json({ error: 'This wallet address is already registered.' }, 409);
       }
 

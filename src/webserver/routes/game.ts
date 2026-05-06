@@ -7,7 +7,7 @@ import {
   getOrCreateTodayTournament,
   startGamePlay,
 } from '../../db/game-plays.ts';
-import { findUserByAddressCached } from '../../db/users.ts';
+import { findUserIdByAddressCached } from '../../db/users.ts';
 import { dateFromId } from '../../utils/index.ts';
 import { authMiddleware, type AuthEnv } from '../middleware/auth.ts';
 
@@ -18,13 +18,13 @@ export const gameRoutes = new Hono<AuthEnv>()
   .post('/start', async (c) => {
     const { address } = c.var.user;
 
-    const user = await findUserByAddressCached(address);
-    if (!user) {
+    const user_id = await findUserIdByAddressCached(address);
+    if (!user_id) {
       return c.json({ error: 'User not found' }, 404);
     }
 
     const dayId = await getOrCreateTodayTournament();
-    const gamePlay = await startGamePlay(user.user_id, dayId);
+    const gamePlay = await startGamePlay(user_id, dayId);
 
     if (!gamePlay) {
       return c.json({ error: 'Not enough energy' }, 400);
@@ -55,12 +55,12 @@ export const gameRoutes = new Hono<AuthEnv>()
       const { address } = c.var.user;
       const { game_play_id, score } = c.req.valid('json');
 
-      const user = await findUserByAddressCached(address);
-      if (!user) {
+      const user_id = await findUserIdByAddressCached(address);
+      if (!user_id) {
         return c.json({ error: 'User not found' }, 404);
       }
 
-      const outcome = await endGamePlay(game_play_id, user.user_id, score);
+      const outcome = await endGamePlay(game_play_id, user_id, score);
 
       if (!outcome.ok) {
         switch (outcome.error) {

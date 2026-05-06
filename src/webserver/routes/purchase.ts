@@ -5,7 +5,7 @@ import { z } from 'zod';
 import blockFallGameAbi from '../../abis/blockfall-game.abi.ts';
 import { BLOCKFALL_GAME_ADDRESS, PAYMENT_TOKENS } from '../../constants.ts';
 import { findTransactionByHash, processPurchase } from '../../db/purchases.ts';
-import { findUserByAddressCached } from '../../db/users.ts';
+import { findUserIdByAddressCached } from '../../db/users.ts';
 import { getBlock, getTransactionReceipt } from '../../utils/celo-rpc-reader.ts';
 import { authMiddleware, type AuthEnv } from '../middleware/auth.ts';
 
@@ -33,8 +33,8 @@ export const purchaseRoutes = new Hono<AuthEnv>()
       const { tx_hash } = c.req.valid('json');
 
       // 1. Check user exists
-      const user = await findUserByAddressCached(address);
-      if (!user) {
+      const user_id = await findUserIdByAddressCached(address);
+      if (!user_id) {
         return c.json({ error: 'User not found' }, 404);
       }
 
@@ -105,7 +105,7 @@ export const purchaseRoutes = new Hono<AuthEnv>()
       const revenue = paymentToken ? formatUnits(event.args.price, paymentToken.decimals) : '0';
 
       const result = await processPurchase(
-        user.user_id,
+        user_id,
         tx_hash,
         txTime,
         revenue,

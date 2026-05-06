@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { getLastSevenDayCheckins, performDailyCheckin } from '../../db/daily-checkins.ts';
-import { findUserByAddressCached } from '../../db/users.ts';
+import { findUserIdByAddressCached } from '../../db/users.ts';
 import { authMiddleware, type AuthEnv } from '../middleware/auth.ts';
 
 export const checkinRoutes = new Hono<AuthEnv>()
@@ -10,12 +10,12 @@ export const checkinRoutes = new Hono<AuthEnv>()
   .get('/', async (c) => {
     const { address } = c.var.user;
 
-    const user = await findUserByAddressCached(address);
-    if (!user) {
+    const user_id = await findUserIdByAddressCached(address);
+    if (!user_id) {
       return c.json({ error: 'User not found' }, 404);
     }
 
-    const days = await getLastSevenDayCheckins(user.user_id);
+    const days = await getLastSevenDayCheckins(user_id);
     return c.json({ days });
   })
 
@@ -24,12 +24,12 @@ export const checkinRoutes = new Hono<AuthEnv>()
   .post('/', async (c) => {
     const { address } = c.var.user;
 
-    const user = await findUserByAddressCached(address);
-    if (!user) {
+    const user_id = await findUserIdByAddressCached(address);
+    if (!user_id) {
       return c.json({ error: 'User not found' }, 404);
     }
 
-    const result = await performDailyCheckin(user.user_id);
+    const result = await performDailyCheckin(user_id);
     if (!result) {
       return c.json({ error: 'Already checked in today' }, 409);
     }

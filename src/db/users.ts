@@ -47,7 +47,23 @@ export async function findUserByAddress(address: string): Promise<UserRow | null
 // incorrect — call findUserByAddress directly there.
 export const findUserByAddressCached = makeSmartCached(findUserByAddress, {
   cacheSeconds: 3,
-  cacheSize: 15_000,
+  cacheSize: 10_000,
+});
+
+export async function findUserIdByAddress(address: string): Promise<string | null> {
+  const rows = await sql<{ user_id: string }[]>`
+    SELECT user_id FROM   users
+    WHERE  address = ${address.toLowerCase()}
+  `;
+  return rows[0]?.user_id ?? null;
+}
+
+// 3s cached variant for read-only hot paths. Do not use in auth/write flows
+// where stale reads (e.g. duplicate-signup guard, read-after-insert) would be
+// incorrect — call findUserByAddress directly there.
+export const findUserIdByAddressCached = makeSmartCached(findUserIdByAddress, {
+  cacheSeconds: 86400,
+  cacheSize: 20_000,
 });
 
 export async function findUserByName(name: string): Promise<UserRow | null> {

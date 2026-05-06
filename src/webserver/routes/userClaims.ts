@@ -6,7 +6,7 @@ import blockFallGameAbi from '../../abis/blockfall-game.abi.ts';
 import { BLOCKFALL_GAME_ADDRESS } from '../../constants.ts';
 import { findPayoutByActionId, processClaim } from '../../db/payouts.ts';
 import { findTransactionByHash } from '../../db/purchases.ts';
-import { findUserByAddressCached } from '../../db/users.ts';
+import { findUserIdByAddressCached } from '../../db/users.ts';
 import { getBlock, getTransactionReceipt } from '../../utils/celo-rpc-reader.ts';
 import { authMiddleware, type AuthEnv } from '../middleware/auth.ts';
 
@@ -32,8 +32,8 @@ export const userClaimsRoutes = new Hono<AuthEnv>()
       const { tx_hash } = c.req.valid('json');
 
       // 1. Check user exists
-      const user = await findUserByAddressCached(address);
-      if (!user) {
+      const user_id = await findUserIdByAddressCached(address);
+      if (!user_id) {
         return c.json({ error: 'User not found' }, 404);
       }
 
@@ -87,7 +87,7 @@ export const userClaimsRoutes = new Hono<AuthEnv>()
         return c.json({ error: 'Payout record not found for action_id' }, 404);
       }
 
-      if (payout.user_id !== user.user_id) {
+      if (payout.user_id !== user_id) {
         return c.json({ error: 'Payout does not belong to authenticated user' }, 403);
       }
 
@@ -107,13 +107,7 @@ export const userClaimsRoutes = new Hono<AuthEnv>()
         amount,
       };
 
-      const result = await processClaim(
-        user.user_id,
-        payout.payout_id,
-        tx_hash,
-        txTime,
-        eventParams
-      );
+      const result = await processClaim(user_id, payout.payout_id, tx_hash, txTime, eventParams);
 
       return c.json({
         transaction_id: result.transaction_id,
