@@ -6,7 +6,6 @@ import {
   type LeaderboardEntry,
   type YesterdayLeaderboardEntry,
 } from '../../db/leaderboard.ts';
-import { findUserIdByAddressCached } from '../../db/users.ts';
 import { makeSmartCached } from '../../utils/smart-cache.ts';
 import { authMiddleware, type AuthEnv } from '../middleware/auth.ts';
 
@@ -29,12 +28,7 @@ function findMyRank<T extends LeaderboardEntry>(list: T[], userId: string): T | 
 }
 
 export const leaderboardRoutes = new Hono<AuthEnv>().use(authMiddleware).get('/', async (c) => {
-  const { address } = c.var.user;
-
-  const user_id = await findUserIdByAddressCached(address);
-  if (!user_id) {
-    return c.json({ error: 'User not found' }, 404);
-  }
+  const { user_id } = c.var.user;
 
   const cached = await getCachedLeaderboards();
   const yesterdayList: YesterdayLeaderboardEntry[] = cached?.yesterday ?? [];

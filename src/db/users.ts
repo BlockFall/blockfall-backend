@@ -75,7 +75,7 @@ export async function findUserByName(name: string): Promise<UserRow | null> {
   return rows[0] ?? null;
 }
 
-export async function getUserWithNumbers(address: string): Promise<UserWithNumbersRow | null> {
+export async function getUserWithNumbers(userId: string): Promise<UserWithNumbersRow | null> {
   const rows = await sql<UserWithNumbersRow[]>`
     SELECT
       u.user_id,
@@ -101,7 +101,7 @@ export async function getUserWithNumbers(address: string): Promise<UserWithNumbe
       WHERE  gp.user_id = u.user_id
         AND  dt.tournament_date = (now() AT TIME ZONE 'UTC')::date
     ) ts ON true
-    WHERE  u.address = ${address.toLowerCase()}
+    WHERE  u.user_id = ${userId}
   `;
   return rows[0] ?? null;
 }

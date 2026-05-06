@@ -6,7 +6,6 @@ import blockFallGameAbi from '../../abis/blockfall-game.abi.ts';
 import { BLOCKFALL_GAME_ADDRESS } from '../../constants.ts';
 import { findPayoutByActionId, processClaim } from '../../db/payouts.ts';
 import { findTransactionByHash } from '../../db/purchases.ts';
-import { findUserIdByAddressCached } from '../../db/users.ts';
 import { getBlock, getTransactionReceipt } from '../../utils/celo-rpc-reader.ts';
 import { authMiddleware, type AuthEnv } from '../middleware/auth.ts';
 
@@ -28,22 +27,16 @@ export const userClaimsRoutes = new Hono<AuthEnv>()
       return result.data;
     }),
     async (c) => {
-      const { address } = c.var.user;
+      const { user_id, address } = c.var.user;
       const { tx_hash } = c.req.valid('json');
 
-      // 1. Check user exists
-      const user_id = await findUserIdByAddressCached(address);
-      if (!user_id) {
-        return c.json({ error: 'User not found' }, 404);
-      }
-
-      // 2. Check for duplicate transaction
+      // 1. Check for duplicate transaction
       const exists = await findTransactionByHash(tx_hash);
       if (exists) {
         return c.json({ error: 'Transaction already processed' }, 409);
       }
 
-      // 3. Fetch transaction receipt from blockchain
+      // 2. Fetch transaction receipt from blockchain
       let receipt;
       try {
         receipt = await getTransactionReceipt(tx_hash as `0x${string}`);
@@ -55,12 +48,12 @@ export const userClaimsRoutes = new Hono<AuthEnv>()
         return c.json({ error: 'Transaction was not successful' }, 400);
       }
 
-      // 4. Verify the transaction was sent to our contract
+      // 3. Verify the transaction was sent to our contract
       if (receipt.to?.toLowerCase() !== BLOCKFALL_GAME_ADDRESS.toLowerCase()) {
         return c.json({ error: 'Transaction is not for the BlockFallGame contract' }, 400);
       }
 
-      // 5. Parse Claimed event from logs
+      // 4. Parse Claimed event from logs
       const claimedLogs = parseEventLogs({
         abi: blockFallGameAbi,
         eventName: 'Claimed',
@@ -76,12 +69,12 @@ export const userClaimsRoutes = new Hono<AuthEnv>()
       const actionIdHex = toHex(event.args.actionId);
       const amount = event.args.amount.toString();
 
-      // 6. Validate player is the current user
+      // 5. Validate player is the current user
       if (player !== address.toLowerCase()) {
         return c.json({ error: 'Transaction player does not match authenticated user' }, 403);
       }
 
-      // 7. Look up the matching payout record
+      // 6. Look up the matching payout record
       const payout = await findPayoutByActionId(actionIdHex);
       if (!payout) {
         return c.json({ error: 'Payout record not found for action_id' }, 404);
@@ -95,11 +88,11 @@ export const userClaimsRoutes = new Hono<AuthEnv>()
         return c.json({ error: 'Payout already claimed' }, 409);
       }
 
-      // 8. Fetch block for transaction timestamp
+      // 7. Fetch block for transaction timestamp
       const block = await getBlock(receipt.blockNumber);
       const txTime = new Date(Number(block.timestamp) * 1000);
 
-      // 9. Process the claim
+      // 8. Process the claim
       const eventParams = {
         actionId: actionIdHex,
         player,

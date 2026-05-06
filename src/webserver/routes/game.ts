@@ -7,7 +7,6 @@ import {
   getOrCreateTodayTournament,
   startGamePlay,
 } from '../../db/game-plays.ts';
-import { findUserIdByAddressCached } from '../../db/users.ts';
 import { dateFromId } from '../../utils/index.ts';
 import { authMiddleware, type AuthEnv } from '../middleware/auth.ts';
 
@@ -16,12 +15,7 @@ export const gameRoutes = new Hono<AuthEnv>()
 
   // POST /game/start — begin a new game play session
   .post('/start', async (c) => {
-    const { address } = c.var.user;
-
-    const user_id = await findUserIdByAddressCached(address);
-    if (!user_id) {
-      return c.json({ error: 'User not found' }, 404);
-    }
+    const { user_id } = c.var.user;
 
     const dayId = await getOrCreateTodayTournament();
     const gamePlay = await startGamePlay(user_id, dayId);
@@ -52,13 +46,8 @@ export const gameRoutes = new Hono<AuthEnv>()
       return result.data;
     }),
     async (c) => {
-      const { address } = c.var.user;
+      const { user_id } = c.var.user;
       const { game_play_id, score } = c.req.valid('json');
-
-      const user_id = await findUserIdByAddressCached(address);
-      if (!user_id) {
-        return c.json({ error: 'User not found' }, 404);
-      }
 
       const outcome = await endGamePlay(game_play_id, user_id, score);
 

@@ -45,8 +45,8 @@ const walletInfoSchema = z.string().min(1, 'wallet_info is required').max(500);
 
 const jwtSecret = new TextEncoder().encode(config.JWT_SECRET);
 
-async function signJwt(address: string, chainId: number): Promise<string> {
-  return new SignJWT({ address: address.toLowerCase(), chainId })
+async function signJwt(userId: string, address: string, chainId: number): Promise<string> {
+  return new SignJWT({ user_id: userId, address: address.toLowerCase(), chainId })
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
     .setExpirationTime('30d')
@@ -160,7 +160,7 @@ export const authRoutes = new Hono()
       }
 
       consumeNonce(verified.nonce);
-      const token = await signJwt(verified.address, verified.chainId);
+      const token = await signJwt(user_id, verified.address, verified.chainId);
       return c.json({ token, address: verified.address });
     }
   )
@@ -202,7 +202,7 @@ export const authRoutes = new Hono()
       }
 
       consumeNonce(verified.nonce);
-      const token = await signJwt(verified.address, verified.chainId);
+      const token = await signJwt(result.user.user_id, verified.address, verified.chainId);
 
       return c.json({ token, address: result.user.address, name: result.user.name }, 201);
     }

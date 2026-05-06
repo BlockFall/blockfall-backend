@@ -13,14 +13,13 @@ import { authMiddleware, type AuthEnv } from '../middleware/auth.ts';
 import { nameSchema } from './auth.ts';
 
 const getCachedUserResponse = makeSmartCached(
-  async (address: string) => {
-    const user = await getUserWithNumbers(address);
-    if (!user) return null;
-
-    const [inventory, pendingClaims] = await Promise.all([
-      getUserInventory(user.user_id),
-      getPendingPayouts(user.user_id),
+  async (userId: string) => {
+    const [user, inventory, pendingClaims] = await Promise.all([
+      getUserWithNumbers(userId),
+      getUserInventory(userId),
+      getPendingPayouts(userId),
     ]);
+    if (!user) return null;
 
     return {
       user_id: user.user_id,
@@ -51,9 +50,9 @@ const getCachedUserResponse = makeSmartCached(
 export const userRoutes = new Hono<AuthEnv>()
   .use(authMiddleware)
   .get('/', async (c) => {
-    const { address } = c.var.user;
+    const { user_id } = c.var.user;
 
-    const response = await getCachedUserResponse(address);
+    const response = await getCachedUserResponse(user_id);
     if (!response) {
       return c.json({ error: 'User not found. Please sign up first.' }, 404);
     }

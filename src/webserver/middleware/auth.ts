@@ -7,6 +7,7 @@ import config from '../../config.ts';
 // ---------------------------------------------------------------------------
 
 export interface JwtPayload {
+  user_id: string;
   address: string;
   chainId: number;
 }
@@ -45,7 +46,14 @@ export const authMiddleware = createMiddleware<AuthEnv>(async (c, next) => {
 
   try {
     const { payload } = await jwtVerify<JwtPayload>(token, jwtSecret);
-    c.set('user', { address: payload.address, chainId: payload.chainId });
+    if (!payload.user_id) {
+      return c.json({ error: 'Invalid or expired token' }, 401);
+    }
+    c.set('user', {
+      user_id: payload.user_id,
+      address: payload.address,
+      chainId: payload.chainId,
+    });
   } catch {
     return c.json({ error: 'Invalid or expired token' }, 401);
   }

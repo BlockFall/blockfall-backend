@@ -1,6 +1,5 @@
 import { Hono } from 'hono';
 import { getLastSevenDayCheckins, performDailyCheckin } from '../../db/daily-checkins.ts';
-import { findUserIdByAddressCached } from '../../db/users.ts';
 import { authMiddleware, type AuthEnv } from '../middleware/auth.ts';
 
 export const checkinRoutes = new Hono<AuthEnv>()
@@ -8,12 +7,7 @@ export const checkinRoutes = new Hono<AuthEnv>()
 
   // GET /checkin — last seven days (UTC) with a checked_in flag per date
   .get('/', async (c) => {
-    const { address } = c.var.user;
-
-    const user_id = await findUserIdByAddressCached(address);
-    if (!user_id) {
-      return c.json({ error: 'User not found' }, 404);
-    }
+    const { user_id } = c.var.user;
 
     const days = await getLastSevenDayCheckins(user_id);
     return c.json({ days });
@@ -22,12 +16,7 @@ export const checkinRoutes = new Hono<AuthEnv>()
   // POST /checkin — perform today's check-in; grants 1 energy, and a mystery
   // box on every 7th consecutive day.
   .post('/', async (c) => {
-    const { address } = c.var.user;
-
-    const user_id = await findUserIdByAddressCached(address);
-    if (!user_id) {
-      return c.json({ error: 'User not found' }, 404);
-    }
+    const { user_id } = c.var.user;
 
     const result = await performDailyCheckin(user_id);
     if (!result) {
