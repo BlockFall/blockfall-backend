@@ -70,14 +70,45 @@ export async function startGamePlay(userId: string, dayId: string): Promise<Game
 
 const GAME_PLAY_MAX_DURATION_MS = 30 * 60 * 1000;
 
+// Anti-cheat: minimum active play time required to be eligible for a score.
+function requiredPlayMs(score: number): number {
+  if (score >= 50_000) return 3 * 60_000;
+  if (score >= 25_000) return 1 * 60_000;
+  if (score >= 10_000) return 1 * 60_000;
+  return 0;
+}
+
+// Anti-cheat: minimum line_clear events required to be eligible for a score.
+function requiredLineClears(score: number): number {
+  if (score >= 6_000) return 20;
+  if (score >= 3_000) return 8;
+  if (score >= 1_000) return 4;
+  return 0;
+}
+
+export type EndGamePlayError =
+  | 'invalid_session' // not found, wrong user, or already ended
+  | 'session_expired' // active play time exceeded 30-min cap
+  | 'time_too_short' // score too high for elapsed active play time
+  | 'too_few_line_clears'; // score too high for observed line_clear count
+
+export type EndGamePlayOutcome =
+  | { ok: true; result: GamePlayResultRow }
+  | { ok: false; error: EndGamePlayError };
+
 /**
- * Sums durations of all pause→resume intervals for a game play. If the last
- * pause has no matching resume, that interval extends to now() (the user is
- * still paused at end-of-game). Caller should flush the in-memory event
- * buffer first so recent pause/resume events are visible.
+ * Single roundtrip to compute:
+ * - paused_ms: total duration spent in pause→resume intervals (an unmatched
+ *   trailing pause extends to now())
+ * - line_clears: count of `line_clear` events
+ *
+ * Caller should flush the in-memory event buffer first so recent events are
+ * visible.
  */
-async function getPausedDurationMs(gamePlayId: string): Promise<number> {
-  const rows = await sql<{ paused_ms: string }[]>`
+async function getGamePlayStats(
+  gamePlayId: string
+): Promise<{ pausedMs: number; lineClears: number }> {
+  const rows = await sql<{ paused_ms: string; line_clears: string }[]>`
     WITH pr AS (
       SELECT event_time,
              event_type,
@@ -87,39 +118,54 @@ async function getPausedDurationMs(gamePlayId: string): Promise<number> {
       WHERE  game_play_id = ${gamePlayId}
         AND  event_type IN ('pause', 'resume')
     )
-    SELECT COALESCE(
-             SUM(EXTRACT(EPOCH FROM (COALESCE(next_time, now()) - event_time)) * 1000),
-             0
-           )::BIGINT AS paused_ms
-    FROM   pr
-    WHERE  event_type = 'pause'
-      AND  (next_type = 'resume' OR next_type IS NULL)
+    SELECT
+      (SELECT COALESCE(
+                SUM(EXTRACT(EPOCH FROM (COALESCE(next_time, now()) - event_time)) * 1000),
+                0
+              )::BIGINT
+       FROM   pr
+       WHERE  event_type = 'pause'
+         AND  (next_type = 'resume' OR next_type IS NULL)) AS paused_ms,
+      (SELECT SUM(intval)::BIGINT
+       FROM   game_ingame_events
+       WHERE  game_play_id = ${gamePlayId}
+         AND  event_type   = 'line_clear') AS line_clears
   `;
-  return Number(rows[0]?.paused_ms ?? 0);
+  return {
+    pausedMs: Number(rows[0]?.paused_ms ?? 0),
+    lineClears: Number(rows[0]?.line_clears ?? 0),
+  };
 }
 
 /**
  * Ends a game play session. Validates:
- * 1. The game play exists and belongs to the given user
- * 2. It hasn't already ended (no row in game_play_results)
- * 3. Active play time is within 30 minutes (wall-clock since start, minus
+ * 1. Active play time is within 30 minutes (wall-clock since start, minus
  *    pause→resume intervals from game_ingame_events)
+ * 2. Score is plausible for the observed active play time
+ * 3. Score is plausible for the observed line_clear event count
+ * 4. The game play exists, belongs to the given user, and hasn't ended yet
  *
- * Inserts a game_play_results row, and updates user_numbers
+ * On success inserts a game_play_results row and updates user_numbers
  * (last_score, best_score, total_score).
- *
- * Returns the inserted result row, or null if validation fails.
  */
 export async function endGamePlay(
   gamePlayId: string,
   userId: string,
   score: number
-): Promise<GamePlayResultRow | null> {
+): Promise<EndGamePlayOutcome> {
   const startedAt = dateFromId(gamePlayId);
   await flushIngameEvents();
-  const pausedMs = await getPausedDurationMs(gamePlayId);
-  if (Date.now() - startedAt.getTime() - pausedMs > GAME_PLAY_MAX_DURATION_MS) {
-    return null;
+  const { pausedMs, lineClears } = await getGamePlayStats(gamePlayId);
+  const activePlayMs = Date.now() - startedAt.getTime() - pausedMs;
+
+  if (activePlayMs > GAME_PLAY_MAX_DURATION_MS) {
+    return { ok: false, error: 'session_expired' };
+  }
+  if (activePlayMs < requiredPlayMs(score)) {
+    return { ok: false, error: 'time_too_short' };
+  }
+  if (lineClears < requiredLineClears(score)) {
+    return { ok: false, error: 'too_few_line_clears' };
   }
 
   const rows = await sql.begin(async (tx) => {
@@ -154,7 +200,10 @@ export async function endGamePlay(
     return inserted;
   });
 
-  return rows?.[0] ?? null;
+  if (!rows?.[0]) {
+    return { ok: false, error: 'invalid_session' };
+  }
+  return { ok: true, result: rows[0] };
 }
 
 // ---------------------------------------------------------------------------

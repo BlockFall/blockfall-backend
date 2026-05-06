@@ -60,17 +60,23 @@ export const gameRoutes = new Hono<AuthEnv>()
         return c.json({ error: 'User not found' }, 404);
       }
 
-      const result = await endGamePlay(game_play_id, user.user_id, score);
+      const outcome = await endGamePlay(game_play_id, user.user_id, score);
 
-      if (!result) {
-        return c.json(
-          {
-            error: 'Invalid game play: not found, already ended, or session expired (15 min limit)',
-          },
-          400
-        );
+      if (!outcome.ok) {
+        switch (outcome.error) {
+          case 'invalid_session':
+            return c.json(
+              { error: 'Invalid game play: not found, wrong user, or already ended' },
+              400
+            );
+          case 'session_expired':
+          case 'time_too_short':
+          case 'too_few_line_clears':
+            return c.json({ error: 'Suspicious activity' }, 422);
+        }
       }
 
+      const { result } = outcome;
       return c.json({
         game_play_id: result.game_play_id,
         score: result.score,
