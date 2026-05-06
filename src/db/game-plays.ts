@@ -1,5 +1,5 @@
 import { dateFromId } from '../utils/index.ts';
-import { sql } from './index.ts';
+import { sql, withTransaction } from './index.ts';
 
 // ---------------------------------------------------------------------------
 // Row types
@@ -31,7 +31,7 @@ export interface GamePlayResultRow {
  * Returns the new game play row, or null if energy is 0.
  */
 export async function startGamePlay(userId: string, dayId: string): Promise<GamePlayRow | null> {
-  const rows = await sql.begin(async (tx) => {
+  return withTransaction(async (tx) => {
     // Decrement energy and increment games_played atomically;
     // the WHERE energy > 0 prevents going below zero.
     const updated = await tx<{ energy: number }[]>`
@@ -62,10 +62,8 @@ export async function startGamePlay(userId: string, dayId: string): Promise<Game
       RETURNING game_play_id, user_id, daily_tournament_id, boost_multiplier
     `;
 
-    return inserted;
+    return inserted[0] ?? null;
   });
-
-  return rows?.[0] ?? null;
 }
 
 const GAME_PLAY_MAX_DURATION_MS = 30 * 60 * 1000;
@@ -168,7 +166,7 @@ export async function endGamePlay(
     return { ok: false, error: 'too_few_line_clears' };
   }
 
-  const rows = await sql.begin(async (tx) => {
+  const result = await withTransaction(async (tx) => {
     // Atomic insert: succeeds only if the game_play exists with the right
     // user and no result row exists yet. PK on game_play_results prevents
     // double-end races.
@@ -197,13 +195,13 @@ export async function endGamePlay(
       WHERE  user_id = ${userId}
     `;
 
-    return inserted;
+    return inserted[0] ?? null;
   });
 
-  if (!rows?.[0]) {
+  if (!result) {
     return { ok: false, error: 'invalid_session' };
   }
-  return { ok: true, result: rows[0] };
+  return { ok: true, result };
 }
 
 // ---------------------------------------------------------------------------

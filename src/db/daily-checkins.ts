@@ -1,5 +1,5 @@
 import { MYSTERY_BOX_ITEM_TYPE } from '../constants.ts';
-import { sql } from './index.ts';
+import { sql, withTransaction } from './index.ts';
 
 // ---------------------------------------------------------------------------
 // Row types
@@ -53,7 +53,7 @@ export async function getLastSevenDayCheckins(userId: string): Promise<CheckInDa
  * Returns null if the user has already checked in today.
  */
 export async function performDailyCheckin(userId: string): Promise<CheckInResult | null> {
-  return sql.begin<CheckInResult | null>(async (tx) => {
+  return withTransaction<CheckInResult | null>(async (tx) => {
     const inserted = await tx<{ check_in_id: string }[]>`
       INSERT INTO daily_checkins (user_id, check_in_date)
       VALUES (${userId}, (now() AT TIME ZONE 'UTC')::date)

@@ -1,5 +1,5 @@
 import { ENERGY_BY_ITEM_TYPE, MYSTERY_BOX_ITEM_TYPE } from '../constants.ts';
-import { sql } from './index.ts';
+import { sql, withTransaction } from './index.ts';
 
 // ---------------------------------------------------------------------------
 // Queries
@@ -29,7 +29,7 @@ export async function processPurchase(
   itemTypeId: number,
   eventParams: object
 ): Promise<{ transaction_id: string }> {
-  return sql.begin(async (tx) => {
+  return withTransaction(async (tx) => {
     // 1. Save transaction
     const txRows = await tx<{ transaction_id: string }[]>`
       INSERT INTO user_transactions (user_id, tx_hash, tx_time, revenue, event_params)

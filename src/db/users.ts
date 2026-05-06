@@ -1,6 +1,6 @@
 import { dateFromId } from '../utils/index.ts';
 import { makeSmartCached } from '../utils/smart-cache.ts';
-import { sql } from './index.ts';
+import { sql, withTransaction } from './index.ts';
 
 // ---------------------------------------------------------------------------
 // Row types — mirror the schema exactly.
@@ -134,7 +134,7 @@ export async function createUser(
 ): Promise<CreateUserResult> {
   const lowerAddress = address.toLowerCase();
 
-  const taken = await sql.begin<boolean>(async (tx) => {
+  const taken = await withTransaction<boolean>(async (tx) => {
     await tx`SELECT pg_advisory_xact_lock(hashtext(${name}))`;
 
     const conflict = await tx`
@@ -192,7 +192,7 @@ export type RenameResult =
 export async function renameUser(address: string, newName: string): Promise<RenameResult> {
   const lowerAddress = address.toLowerCase();
 
-  return sql.begin<RenameResult>(async (tx) => {
+  return withTransaction<RenameResult>(async (tx) => {
     // Serialize concurrent renames targeting the same name.
     await tx`SELECT pg_advisory_xact_lock(hashtext(${newName}))`;
 

@@ -1,4 +1,4 @@
-import { sql } from './index.ts';
+import { sql, withTransaction } from './index.ts';
 
 // ---------------------------------------------------------------------------
 // Row types
@@ -60,7 +60,7 @@ export async function processClaim(
   eventParams: object
 ): Promise<{ transaction_id: string }> {
   try {
-    return await sql.begin(async (tx) => {
+    return await withTransaction(async (tx) => {
       const txRows = await tx<{ transaction_id: string }[]>`
         INSERT INTO user_transactions (user_id, tx_hash, tx_time, revenue, event_params)
         VALUES (${userId}, ${txHash}, ${txTime}, 0, ${JSON.stringify(eventParams)})
