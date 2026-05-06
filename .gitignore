@@ -19,3 +19,4 @@ docker-compose.yaml
 !.vscode/launch.json
 !.vscode/extensions.json
 
+src/stress-test/tokens.json
