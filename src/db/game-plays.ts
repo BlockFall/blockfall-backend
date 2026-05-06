@@ -265,7 +265,7 @@ async function doFlushIngameEvents(): Promise<void> {
                ${batch.map((e) => e.intval)}::int[],
                ${batch.map((e) => e.textval)}::text[],
                ${batch.map((e) => e.extra_data_json)}::text[]
-             ) AS t(game_play_id, user_id, event_time, event_type, intval, textval, extra_data)
+             ) AS t(game_play_id, event_time, event_type, intval, textval, extra_data)
       WHERE  EXISTS (
                SELECT 1 FROM game_plays gp
                WHERE  gp.game_play_id = t.game_play_id::bigint
