@@ -266,7 +266,7 @@ async function doFlushIngameEvents(): Promise<void> {
       FROM   UNNEST(
                ${batch.map((e) => e.game_play_id)}::text[],
                ${batch.map((e) => e.user_id)}::text[],
-               ${batch.map((e) => e.event_time)}::timestamptz[],
+               ${sql.array(batch.map((e) => e.event_time))}::timestamptz[],
                ${batch.map((e) => e.event_type)}::text[],
                ${batch.map((e) => e.intval)}::int[],
                ${batch.map((e) => e.textval)}::text[],
