@@ -12,9 +12,17 @@ import { authMiddleware, type AuthEnv } from '../middleware/auth.ts';
 
 const TOP_N = 50;
 
-const getYesterday = makeSmartCached(fetchYesterdayLeaderboard, { cacheSeconds: 86_400 });
-const getToday = makeSmartCached(fetchTodayLeaderboard, { cacheSeconds: 15 });
-const getOverall = makeSmartCached(fetchOverallLeaderboard, { cacheSeconds: 15 });
+const getCachedLeaderboards = makeSmartCached(
+  async () => {
+    const [yesterday, today, overall] = await Promise.all([
+      fetchYesterdayLeaderboard(),
+      fetchTodayLeaderboard(),
+      fetchOverallLeaderboard(),
+    ]);
+    return { yesterday, today, overall };
+  },
+  { cacheSeconds: 10, autoRefresh: true, fileBackupName: 'leaderboard' }
+);
 
 function findMyRank<T extends LeaderboardEntry>(list: T[], userId: string): T | null {
   return list.find((e) => e.user_id === userId) ?? null;
@@ -28,11 +36,10 @@ export const leaderboardRoutes = new Hono<AuthEnv>().use(authMiddleware).get('/'
     return c.json({ error: 'User not found' }, 404);
   }
 
-  const [yesterday, today, overall] = await Promise.all([getYesterday(), getToday(), getOverall()]);
-
-  const yesterdayList: YesterdayLeaderboardEntry[] = yesterday ?? [];
-  const todayList: LeaderboardEntry[] = today ?? [];
-  const overallList: LeaderboardEntry[] = overall ?? [];
+  const cached = await getCachedLeaderboards();
+  const yesterdayList: YesterdayLeaderboardEntry[] = cached?.yesterday ?? [];
+  const todayList: LeaderboardEntry[] = cached?.today ?? [];
+  const overallList: LeaderboardEntry[] = cached?.overall ?? [];
 
   return c.json({
     yesterday: {

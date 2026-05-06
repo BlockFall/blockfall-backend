@@ -8,29 +8,21 @@ import {
   getUserWithNumbers,
   renameUser,
 } from '../../db/users.ts';
+import { makeSmartCached } from '../../utils/smart-cache.ts';
 import { authMiddleware, type AuthEnv } from '../middleware/auth.ts';
 import { nameSchema } from './auth.ts';
 
-/**
- * GET  /user         — authenticated user's profile + stats
- * POST /user/rename  — change the authenticated user's display name
- */
-export const userRoutes = new Hono<AuthEnv>()
-  .use(authMiddleware)
-  .get('/', async (c) => {
-    const { address } = c.var.user;
-
+const getCachedUserResponse = makeSmartCached(
+  async (address: string) => {
     const user = await getUserWithNumbers(address);
-    if (!user) {
-      return c.json({ error: 'User not found. Please sign up first.' }, 404);
-    }
+    if (!user) return null;
 
     const [inventory, pendingClaims] = await Promise.all([
       getUserInventory(user.user_id),
       getPendingPayouts(user.user_id),
     ]);
 
-    return c.json({
+    return {
       user_id: user.user_id,
       address: user.address,
       name: user.name,
@@ -47,7 +39,26 @@ export const userRoutes = new Hono<AuthEnv>()
       },
       inventory,
       pending_claims: pendingClaims,
-    });
+    };
+  },
+  { cacheSeconds: 3 }
+);
+
+/**
+ * GET  /user         — authenticated user's profile + stats
+ * POST /user/rename  — change the authenticated user's display name
+ */
+export const userRoutes = new Hono<AuthEnv>()
+  .use(authMiddleware)
+  .get('/', async (c) => {
+    const { address } = c.var.user;
+
+    const response = await getCachedUserResponse(address);
+    if (!response) {
+      return c.json({ error: 'User not found. Please sign up first.' }, 404);
+    }
+
+    return c.json(response);
   })
   .post(
     '/rename',
