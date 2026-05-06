@@ -68,7 +68,7 @@ export async function startGamePlay(userId: string, dayId: string): Promise<Game
   return rows?.[0] ?? null;
 }
 
-const GAME_PLAY_MAX_DURATION_MS = 15 * 60 * 1000;
+const GAME_PLAY_MAX_DURATION_MS = 30 * 60 * 1000;
 
 /**
  * Sums durations of all pause→resume intervals for a game play. If the last
@@ -102,7 +102,7 @@ async function getPausedDurationMs(gamePlayId: string): Promise<number> {
  * Ends a game play session. Validates:
  * 1. The game play exists and belongs to the given user
  * 2. It hasn't already ended (no row in game_play_results)
- * 3. Active play time is within 15 minutes (wall-clock since start, minus
+ * 3. Active play time is within 30 minutes (wall-clock since start, minus
  *    pause→resume intervals from game_ingame_events)
  *
  * Inserts a game_play_results row, and updates user_numbers

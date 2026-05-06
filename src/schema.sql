@@ -27,7 +27,7 @@ CREATE TABLE daily_tournaments (
     tournament_date     DATE   NOT NULL UNIQUE
 );
 
--- Daily tournament Results, added when processed (no-update) (one-to-one, enforced by PK/FK)
+-- Daily tournament Results, added when processed (no-update) (one-to-one, enforced by unique FK)
 CREATE TABLE daily_tournament_results (
     tournament_result_id BIGINT DEFAULT generate_id() PRIMARY KEY,
     daily_tournament_id  BIGINT NOT NULL UNIQUE REFERENCES daily_tournaments(daily_tournament_id),
@@ -44,7 +44,7 @@ CREATE TABLE game_plays (
     boost_multiplier    INT         NOT NULL -- normally 100 (divided by 100 in calculations. e.g. 150 for 1.5x boost)
 );
 
--- Game plays results (no-update) (one-to-one with game_plays, enforced by PK/FK)
+-- Game plays results (no-update) (one-to-one with game_plays, enforced by unique FK)
 CREATE TABLE game_play_results (
     game_play_result_id BIGINT      DEFAULT generate_id() PRIMARY KEY,
     game_play_id        BIGINT      NOT NULL UNIQUE REFERENCES game_plays(game_play_id),
@@ -120,7 +120,7 @@ CREATE TABLE user_payouts (
     daily_tournament_id  BIGINT      REFERENCES daily_tournaments(daily_tournament_id) -- for daily rewards
 );
 
--- User claims (no-update) (one-to-one with payouts, enforced by PK/FK)
+-- User claims (no-update) (one-to-one with payouts, enforced by unique FK)
 CREATE TABLE user_claims (
     claim_id             BIGINT   DEFAULT generate_id() PRIMARY KEY,
     payout_id            BIGINT   NOT NULL UNIQUE REFERENCES user_payouts(payout_id),

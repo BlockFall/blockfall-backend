@@ -43,7 +43,7 @@ export const gameRoutes = new Hono<AuthEnv>()
       const result = z
         .object({
           game_play_id: z.string().min(1),
-          score: z.number().int().min(0),
+          score: z.number().int().min(0).max(200_000),
         })
         .safeParse(value);
       if (!result.success) {
