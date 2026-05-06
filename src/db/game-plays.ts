@@ -214,7 +214,6 @@ export async function endGamePlay(
 
 interface BufferedIngameEvent {
   game_play_id: string;
-  user_id: string;
   event_time: Date;
   event_type: string;
   intval: number | null;
@@ -227,7 +226,6 @@ let flushInFlight: Promise<void> | null = null;
 
 export function bufferIngameEvent(
   gamePlayId: string,
-  userId: string,
   eventType: string,
   intval: number | null,
   textval: string | null,
@@ -236,7 +234,6 @@ export function bufferIngameEvent(
   const event_time = new Date();
   ingameEventBuffer.push({
     game_play_id: gamePlayId,
-    user_id: userId,
     event_time,
     event_type: eventType,
     intval,
@@ -263,7 +260,6 @@ async function doFlushIngameEvents(): Promise<void> {
              t.extra_data::jsonb
       FROM   UNNEST(
                ${batch.map((e) => e.game_play_id)}::text[],
-               ${batch.map((e) => e.user_id)}::text[],
                ${sql.array(batch.map((e) => e.event_time))}::timestamptz[],
                ${batch.map((e) => e.event_type)}::text[],
                ${batch.map((e) => e.intval)}::int[],
@@ -273,7 +269,6 @@ async function doFlushIngameEvents(): Promise<void> {
       WHERE  EXISTS (
                SELECT 1 FROM game_plays gp
                WHERE  gp.game_play_id = t.game_play_id::bigint
-                 AND  gp.user_id      = t.user_id::bigint
              )
         AND  NOT EXISTS (
                SELECT 1 FROM game_play_results gpr

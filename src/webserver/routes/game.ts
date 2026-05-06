@@ -105,20 +105,14 @@ export const gameRoutes = new Hono<AuthEnv>()
       }
       return result.data;
     }),
+    // eslint-disable-next-line @typescript-eslint/require-await
     async (c) => {
-      const { address } = c.var.user;
       const { game_play_id, event_type, intval, textval, extra_data } = c.req.valid('json');
-
-      const user = await findUserByAddressCached(address);
-      if (!user) {
-        return c.json({ error: 'User not found' }, 404);
-      }
 
       // Buffered: returns immediately. Ownership and not-yet-ended checks are
       // applied at flush time (every ~1s) — bad rows are silently dropped.
       const { event_time } = bufferIngameEvent(
         game_play_id,
-        user.user_id,
         event_type,
         intval ?? null,
         textval ?? null,
