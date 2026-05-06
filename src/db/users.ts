@@ -47,6 +47,7 @@ export async function findUserByAddress(address: string): Promise<UserRow | null
 // incorrect — call findUserByAddress directly there.
 export const findUserByAddressCached = makeSmartCached(findUserByAddress, {
   cacheSeconds: 3,
+  cacheSize: 15_000,
 });
 
 export async function findUserByName(name: string): Promise<UserRow | null> {

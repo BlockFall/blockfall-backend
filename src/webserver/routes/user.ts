@@ -41,7 +41,7 @@ const getCachedUserResponse = makeSmartCached(
       pending_claims: pendingClaims,
     };
   },
-  { cacheSeconds: 3 }
+  { cacheSeconds: 3, cacheSize: 15_000 }
 );
 
 /**
