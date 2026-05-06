@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { getLastSevenDayCheckins, performDailyCheckin } from '../../db/daily-checkins.ts';
-import { findUserByAddress } from '../../db/users.ts';
+import { findUserByAddressCached } from '../../db/users.ts';
 import { authMiddleware, type AuthEnv } from '../middleware/auth.ts';
 
 export const checkinRoutes = new Hono<AuthEnv>()
@@ -10,7 +10,7 @@ export const checkinRoutes = new Hono<AuthEnv>()
   .get('/', async (c) => {
     const { address } = c.var.user;
 
-    const user = await findUserByAddress(address);
+    const user = await findUserByAddressCached(address);
     if (!user) {
       return c.json({ error: 'User not found' }, 404);
     }
@@ -24,7 +24,7 @@ export const checkinRoutes = new Hono<AuthEnv>()
   .post('/', async (c) => {
     const { address } = c.var.user;
 
-    const user = await findUserByAddress(address);
+    const user = await findUserByAddressCached(address);
     if (!user) {
       return c.json({ error: 'User not found' }, 404);
     }

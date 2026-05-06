@@ -7,7 +7,7 @@ import {
   getOrCreateTodayTournament,
   startGamePlay,
 } from '../../db/game-plays.ts';
-import { findUserByAddress } from '../../db/users.ts';
+import { findUserByAddressCached } from '../../db/users.ts';
 import { dateFromId } from '../../utils/index.ts';
 import { authMiddleware, type AuthEnv } from '../middleware/auth.ts';
 
@@ -18,7 +18,7 @@ export const gameRoutes = new Hono<AuthEnv>()
   .post('/start', async (c) => {
     const { address } = c.var.user;
 
-    const user = await findUserByAddress(address);
+    const user = await findUserByAddressCached(address);
     if (!user) {
       return c.json({ error: 'User not found' }, 404);
     }
@@ -55,7 +55,7 @@ export const gameRoutes = new Hono<AuthEnv>()
       const { address } = c.var.user;
       const { game_play_id, score } = c.req.valid('json');
 
-      const user = await findUserByAddress(address);
+      const user = await findUserByAddressCached(address);
       if (!user) {
         return c.json({ error: 'User not found' }, 404);
       }
@@ -103,7 +103,7 @@ export const gameRoutes = new Hono<AuthEnv>()
       const { address } = c.var.user;
       const { game_play_id, event_type, intval, textval, extra_data } = c.req.valid('json');
 
-      const user = await findUserByAddress(address);
+      const user = await findUserByAddressCached(address);
       if (!user) {
         return c.json({ error: 'User not found' }, 404);
       }

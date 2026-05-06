@@ -1,4 +1,5 @@
 import { dateFromId } from '../utils/index.ts';
+import { makeSmartCached } from '../utils/smart-cache.ts';
 import { sql } from './index.ts';
 
 // ---------------------------------------------------------------------------
@@ -40,6 +41,13 @@ export async function findUserByAddress(address: string): Promise<UserRow | null
   `;
   return rows[0] ?? null;
 }
+
+// 3s cached variant for read-only hot paths. Do not use in auth/write flows
+// where stale reads (e.g. duplicate-signup guard, read-after-insert) would be
+// incorrect — call findUserByAddress directly there.
+export const findUserByAddressCached = makeSmartCached(findUserByAddress, {
+  cacheSeconds: 3,
+});
 
 export async function findUserByName(name: string): Promise<UserRow | null> {
   const rows = await sql<UserRow[]>`

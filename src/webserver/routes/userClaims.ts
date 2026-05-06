@@ -6,7 +6,7 @@ import blockFallGameAbi from '../../abis/blockfall-game.abi.ts';
 import { BLOCKFALL_GAME_ADDRESS } from '../../constants.ts';
 import { findPayoutByActionId, processClaim } from '../../db/payouts.ts';
 import { findTransactionByHash } from '../../db/purchases.ts';
-import { findUserByAddress } from '../../db/users.ts';
+import { findUserByAddressCached } from '../../db/users.ts';
 import { getBlock, getTransactionReceipt } from '../../utils/celo-rpc-reader.ts';
 import { authMiddleware, type AuthEnv } from '../middleware/auth.ts';
 
@@ -32,7 +32,7 @@ export const userClaimsRoutes = new Hono<AuthEnv>()
       const { tx_hash } = c.req.valid('json');
 
       // 1. Check user exists
-      const user = await findUserByAddress(address);
+      const user = await findUserByAddressCached(address);
       if (!user) {
         return c.json({ error: 'User not found' }, 404);
       }
