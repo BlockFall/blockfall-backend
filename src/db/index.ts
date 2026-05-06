@@ -6,9 +6,10 @@ import config from '../config.ts';
  * postgres.js is lazy: the pool connects on the first query, not at import time.
  */
 export const sql = postgres(config.DATABASE_URL, {
-  max: 10, // max pool size
+  max: 50, // max pool size
   idle_timeout: 30, // close idle connections after 30 s
   connect_timeout: 10,
+  max_lifetime: 60 * 30,
 });
 
 /**
@@ -26,9 +27,7 @@ export const sql = postgres(config.DATABASE_URL, {
  * `sql.reserve()` flips the reservation flag synchronously *before* any query
  * is sent, so the pool's transaction bookkeeping cannot race with the BEGIN.
  */
-export async function withTransaction<T>(
-  fn: (tx: postgres.ReservedSql) => Promise<T>
-): Promise<T> {
+export async function withTransaction<T>(fn: (tx: postgres.ReservedSql) => Promise<T>): Promise<T> {
   const tx = await sql.reserve();
   try {
     await tx`BEGIN`;

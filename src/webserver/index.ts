@@ -1,4 +1,4 @@
-import { serve } from '@hono/node-server';
+import { createAdaptorServer } from '@hono/node-server';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import config from '../config.ts';
@@ -31,8 +31,9 @@ export type AppType = typeof app;
 
 export function startWebServer(): Promise<void> {
   return new Promise((resolve) => {
-    serve({ fetch: app.fetch, port: config.PORT, hostname: config.HOST }, (info) => {
-      console.log(`Server running at http://${info.address}:${info.port.toString()}`);
+    const server = createAdaptorServer({ fetch: app.fetch });
+    server.listen(config.PORT, config.HOST, 10_000, () => {
+      console.log(`Server running at http://${config.HOST}:${config.PORT}`);
       resolve();
     });
   });
