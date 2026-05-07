@@ -46,3 +46,15 @@ export const PAYMENT_TOKENS = {
   2: { address: USDC_ADDRESS, symbol: 'USDC', decimals: 6 },
   3: { address: USDm_ADDRESS, symbol: 'USDm', decimals: 18 },
 };
+
+// ---------------------------------------------------------------------------
+// Daily tournament payouts
+// ---------------------------------------------------------------------------
+
+// Token used for daily reward payouts. Matches keys in PAYMENT_TOKENS.
+export const DAILY_PAYOUT_TOKEN_ID = 1 as const; // USDT
+
+// Minimum total revenue (revenue + inherited_revenue), in human-readable
+// USDT, required to trigger a payout. If total is below this, the day's
+// revenue rolls over to the next day's inherited_revenue.
+export const MIN_PAYOUT_THRESHOLD_USDT = '2';

@@ -13,6 +13,8 @@ const configSchema = z.object({
   SIWE_DOMAINS: z.string().default('localhost'),
   // PostgreSQL connection string, e.g. postgres://user:pass@localhost:5432/blockfall
   DATABASE_URL: z.string().min(1),
+  ENCRYPTED_PASS: z.string().min(1, 'ENCRYPTED_PASS is required'),
+  ENCRYPTED_SIGNER_PRIVATE_KEY: z.string().min(1, 'ENCRYPTED_SIGNER_PRIVATE_KEY is required'),
 });
 
 interface ConfigValues {
@@ -22,6 +24,8 @@ interface ConfigValues {
   JWT_SECRET: string;
   SIWE_DOMAINS: string;
   DATABASE_URL: string;
+  ENCRYPTED_PASS: string;
+  ENCRYPTED_SIGNER_PRIVATE_KEY: string;
   siweDomains: string[];
 }
 

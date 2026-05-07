@@ -32,6 +32,8 @@ CREATE TABLE daily_tournament_results (
     tournament_result_id BIGINT DEFAULT generate_id() PRIMARY KEY,
     daily_tournament_id  BIGINT NOT NULL UNIQUE REFERENCES daily_tournaments(daily_tournament_id),
     revenue              NUMERIC NOT NULL CHECK (revenue >= 0),
+    inherited_revenue    NUMERIC NOT NULL CHECK (inherited_revenue >= 0), -- revenue inherited from previous day
+    -- used_for_payout = (revenue + inherited_revenue) / 2 | if revenue is less than a certain threshold, this is set to 0 and the revenue is rolled over to the next day (inherited_revenue)
     used_for_payout      NUMERIC NOT NULL CHECK (used_for_payout >= 0),
     processed_at         TIMESTAMPTZ GENERATED ALWAYS AS (date_from_id(tournament_result_id)) STORED
 );
