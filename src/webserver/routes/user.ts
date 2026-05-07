@@ -3,7 +3,7 @@ import { validator } from 'hono/validator';
 import { z } from 'zod';
 import { getPendingPayouts } from '../../db/payouts.ts';
 import {
-  findUserIdByAddressCached,
+  findUserIdByAddress,
   getUserInventory,
   getUserWithNumbers,
   renameUser,
@@ -109,7 +109,7 @@ export const checkUserRoute = new Hono().get(
   }),
   async (c) => {
     const { account } = c.req.valid('query');
-    const user_id = await findUserIdByAddressCached(account);
+    const user_id = await findUserIdByAddress(account);
 
     if (!user_id) {
       return c.json({ registered: false });
