@@ -186,13 +186,32 @@ export async function endGamePlay(
       return null;
     }
 
+    // today_score is keyed on the *game's* tournament_date, not now()::date —
+    // a play started near midnight UTC may end after the day rolls over but
+    // still belongs to yesterday's tournament. GREATEST treats NULL as
+    // missing, so a fresh row (today_score_date IS NULL) is initialized to
+    // dt.tournament_date. The CASE only resets today_score forward in time;
+    // a late-finishing play from an earlier day must not overwrite a newer
+    // day's accumulated score.
     await tx`
       UPDATE user_numbers
-      SET    last_score  = ${score},
-             best_score  = GREATEST(best_score, ${score}),
-             total_score = total_score + ${score},
-             updated_at  = now()
-      WHERE  user_id = ${userId}
+      SET    last_score        = ${score},
+             best_score        = GREATEST(best_score, ${score}),
+             total_score       = total_score + ${score},
+             today_score       = CASE
+               WHEN user_numbers.today_score_date = dt.tournament_date
+                 THEN user_numbers.today_score + ${score}
+               WHEN user_numbers.today_score_date IS NULL
+                 OR user_numbers.today_score_date < dt.tournament_date
+                 THEN ${score}
+               ELSE user_numbers.today_score
+             END,
+             today_score_date  = GREATEST(user_numbers.today_score_date, dt.tournament_date),
+             updated_at        = now()
+      FROM   game_plays gp
+      JOIN   daily_tournaments dt ON dt.daily_tournament_id = gp.daily_tournament_id
+      WHERE  user_numbers.user_id = ${userId}
+        AND  gp.game_play_id = ${gamePlayId}
     `;
 
     return inserted[0] ?? null;

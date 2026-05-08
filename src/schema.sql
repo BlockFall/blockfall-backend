@@ -141,13 +141,15 @@ CREATE TABLE daily_total_scores (
 
 -- Per-user stats (updateable) (recreateable summary) (high-churn row → HOT-update friendly)
 CREATE TABLE user_numbers (
-    user_id      BIGINT  PRIMARY KEY REFERENCES users(user_id),
-    best_score   INT     NOT NULL DEFAULT 0 CHECK (best_score   >= 0),
-    last_score   INT     NOT NULL DEFAULT 0 CHECK (last_score   >= 0),
-    games_played INT     NOT NULL DEFAULT 0 CHECK (games_played >= 0),
-    energy       INT     NOT NULL DEFAULT 0 CHECK (energy       >= 0),
-    total_score  BIGINT  NOT NULL DEFAULT 0 CHECK (total_score  >= 0),
-    updated_at   TIMESTAMPTZ
+    user_id           BIGINT  PRIMARY KEY REFERENCES users(user_id),
+    best_score        INT     NOT NULL DEFAULT 0 CHECK (best_score   >= 0),
+    last_score        INT     NOT NULL DEFAULT 0 CHECK (last_score   >= 0),
+    games_played      INT     NOT NULL DEFAULT 0 CHECK (games_played >= 0),
+    energy            INT     NOT NULL DEFAULT 0 CHECK (energy       >= 0),
+    total_score       BIGINT  NOT NULL DEFAULT 0 CHECK (total_score  >= 0),
+    today_score       INT     NOT NULL DEFAULT 0 CHECK (today_score  >= 0), --today_score is meaningful when today_score_date matches the current date
+    today_score_date  DATE,
+    updated_at        TIMESTAMPTZ
 ) WITH (fillfactor = 80);
 
 -- User Boost information (updateable) (recreateable summary) (no record if no active boost)
