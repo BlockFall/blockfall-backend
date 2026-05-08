@@ -29,7 +29,7 @@ export async function fetchYesterdayLeaderboard(): Promise<YesterdayLeaderboardE
            u.address,
            dts.total_score,
            dts.rank,
-           p.amount AS reward
+           TRUNC(p.amount / 10.0 ^ 6, 3) AS reward
     FROM   daily_total_scores dts
     JOIN   users_with_data u ON u.user_id = dts.user_id
     LEFT JOIN daily_tournaments dt ON dt.tournament_date = dts.score_date
