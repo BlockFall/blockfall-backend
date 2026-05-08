@@ -104,7 +104,7 @@ export async function processDailyTournamentTick(): Promise<string | null> {
     // No-players-but-revenue (rare edge case) rolls over to next day rather
     // than burning half the revenue.
     const willPayOut = totalRevenueWei >= thresholdWei && topPlayers.length > 0;
-    const usedForPayoutWei = willPayOut ? totalRevenueWei / 2n : 0n;
+    const usedForPayoutWei = willPayOut ? totalRevenueWei : 0n;
 
     if (willPayOut) {
       const payouts = buildPayouts(topPlayers, usedForPayoutWei);
