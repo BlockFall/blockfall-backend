@@ -33,6 +33,8 @@ export const gameRoutes = new Hono<AuthEnv>()
   .post('/start', async (c) => {
     const { user_id } = c.var.user;
 
+    console.log(`[game/start] user=${user_id} ua=${c.req.header('user-agent') ?? '(none)'}`);
+
     const dayId = await getOrCreateTodayTournament();
     const gamePlay = await startGamePlay(user_id, dayId, getClientIp(c));
 
