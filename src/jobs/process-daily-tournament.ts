@@ -18,6 +18,7 @@ import {
 import { getPercentageByRank } from '../distribution-rates.ts';
 import { getBlockfallSeed } from '../utils/celo-rpc-reader.ts';
 import { decrypt } from '../utils/encryption.ts';
+import { banSuspiciousUsers } from './ban-suspicious-users.ts';
 
 // Run cadence — index.ts schedules this with maintainAsyncJob.
 export const PROCESS_TOURNAMENT_INTERVAL_MS = 10 * 60 * 1000;
@@ -81,6 +82,10 @@ export async function processDailyTournamentTick(): Promise<string | null> {
       WHERE  daily_tournament_id = ${tournament.daily_tournament_id}
     `;
     if (already.length > 0) return;
+
+    // Ban cheaters before computing the day's leaderboard so banned users are
+    // excluded from daily_total_scores and from any payout.
+    await banSuspiciousUsers(tournament.daily_tournament_id, tx);
 
     await insertDailyTotalScores(tx, tournament.daily_tournament_id, tournament.tournament_date);
 
