@@ -38,6 +38,7 @@ export async function fetchYesterdayLeaderboard(): Promise<YesterdayLeaderboardE
           AND p.daily_tournament_id = dt.daily_tournament_id
           AND p.payout_type = 'daily_reward'
     WHERE  dts.score_date = (now() AT TIME ZONE 'UTC')::date - INTERVAL '1 day'
+      AND  NOT u.is_banned
     ORDER BY dts.rank
   `;
 }
@@ -59,6 +60,7 @@ export async function fetchTodayLeaderboard(): Promise<LeaderboardEntry[]> {
       JOIN   daily_tournaments dt ON dt.daily_tournament_id = gp.daily_tournament_id
       JOIN   users_with_data u ON u.user_id = gp.user_id
       WHERE  dt.tournament_date = (now() AT TIME ZONE 'UTC')::date
+        AND  NOT u.is_banned
       GROUP BY u.user_id, u.name, u.address
     ) t
     ORDER BY rank, user_id
@@ -75,6 +77,7 @@ export async function fetchOverallLeaderboard(): Promise<LeaderboardEntry[]> {
     FROM   user_numbers un
     JOIN   users_with_data u ON u.user_id = un.user_id
     WHERE  un.total_score > 0
+      AND  NOT u.is_banned
     ORDER BY rank, u.user_id
   `;
 }

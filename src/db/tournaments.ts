@@ -62,7 +62,9 @@ export async function findOldestUnprocessedTournament(): Promise<UnprocessedTour
 /**
  * Computes per-user total scores for the tournament, ranks them with
  * RANK() (matches fetchTodayLeaderboard), and inserts into daily_total_scores.
- * Excludes plays that never produced a result row.
+ * Excludes plays that never produced a result row, and excludes banned users
+ * before ranking so the resulting ranks have no gaps and downstream payouts
+ * never target a banned address.
  */
 export async function insertDailyTotalScores(
   tx: Sql,
@@ -78,7 +80,9 @@ export async function insertDailyTotalScores(
              RANK() OVER (ORDER BY SUM(gpr.score) DESC)::int AS rank
       FROM   game_plays gp
       JOIN   game_play_results gpr ON gpr.game_play_id = gp.game_play_id
+      JOIN   users_with_data u ON u.user_id = gp.user_id
       WHERE  gp.daily_tournament_id = ${tournamentId}
+        AND  NOT u.is_banned
       GROUP BY gp.user_id
     ) t
   `;

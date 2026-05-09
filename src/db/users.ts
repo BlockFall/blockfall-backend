@@ -66,6 +66,22 @@ export const findUserIdByAddressCached = makeSmartCached(findUserIdByAddress, {
   cacheSize: 20_000,
 });
 
+async function fetchBannedUserIds(): Promise<Set<string>> {
+  const rows = await sql<{ user_id: string }[]>`
+    SELECT user_id FROM users_with_data WHERE is_banned
+  `;
+  return new Set(rows.map((r) => r.user_id));
+}
+
+// 10-min auto-refreshing blacklist used by the auth middleware and any other
+// hot path that needs an O(1) "is this user banned?" check. Up to 10 minutes
+// stale, which is acceptable since /user/ban (or equivalent admin path) is
+// rare and a few extra minutes of access for a freshly-banned user is fine.
+export const getCachedBannedUserIds = makeSmartCached(fetchBannedUserIds, {
+  cacheSeconds: 600,
+  autoRefresh: true,
+});
+
 export async function findUserByName(name: string): Promise<UserRow | null> {
   const rows = await sql<UserRow[]>`
     SELECT user_id, address, user_source, wallet_info, name, is_banned, created_at

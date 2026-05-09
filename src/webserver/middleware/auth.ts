@@ -1,6 +1,7 @@
 import { createMiddleware } from 'hono/factory';
 import { jwtVerify } from 'jose';
 import config from '../../config.ts';
+import { getCachedBannedUserIds } from '../../db/users.ts';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -48,6 +49,10 @@ export const authMiddleware = createMiddleware<AuthEnv>(async (c, next) => {
     const { payload } = await jwtVerify<JwtPayload>(token, jwtSecret);
     if (!payload.user_id) {
       return c.json({ error: 'Invalid or expired token' }, 401);
+    }
+    const banned = await getCachedBannedUserIds();
+    if (banned?.has(payload.user_id)) {
+      return c.json({ error: 'User is banned' }, 403);
     }
     c.set('user', {
       user_id: payload.user_id,
