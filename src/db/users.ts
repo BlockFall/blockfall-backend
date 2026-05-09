@@ -130,7 +130,7 @@ export async function getUserInventory(userId: string): Promise<UserItemRow[]> {
   return rows.map((r) => ({ ...r, acquisition_date: dateFromId(r.item_id) }));
 }
 
-const SIGNUP_ENERGY = 10;
+const SIGNUP_ENERGY = 3;
 
 export type CreateUserResult =
   | { success: true; user: UserRow }
