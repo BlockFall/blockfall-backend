@@ -43,7 +43,8 @@ CREATE TABLE game_plays (
     game_play_id        BIGINT      DEFAULT generate_id() PRIMARY KEY, -- has start_date in it
     user_id             BIGINT      NOT NULL REFERENCES users(user_id),
     daily_tournament_id BIGINT      NOT NULL REFERENCES daily_tournaments(daily_tournament_id),
-    boost_multiplier    INT         NOT NULL -- normally 100 (divided by 100 in calculations. e.g. 150 for 1.5x boost)
+    boost_multiplier    INT         NOT NULL, -- normally 100 (divided by 100 in calculations. e.g. 150 for 1.5x boost)
+    ip_address          INET
 );
 
 -- Game plays results (no-update) (one-to-one with game_plays, enforced by unique FK)

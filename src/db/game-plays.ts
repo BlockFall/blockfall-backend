@@ -30,7 +30,11 @@ export interface GamePlayResultRow {
  *
  * Returns the new game play row, or null if energy is 0.
  */
-export async function startGamePlay(userId: string, dayId: string): Promise<GamePlayRow | null> {
+export async function startGamePlay(
+  userId: string,
+  dayId: string,
+  ipAddress: string | null
+): Promise<GamePlayRow | null> {
   return withTransaction(async (tx) => {
     // Decrement energy and increment games_played atomically;
     // the WHERE energy > 0 prevents going below zero.
@@ -49,7 +53,7 @@ export async function startGamePlay(userId: string, dayId: string): Promise<Game
     }
 
     const inserted = await tx<GamePlayRow[]>`
-      INSERT INTO game_plays (user_id, daily_tournament_id, boost_multiplier)
+      INSERT INTO game_plays (user_id, daily_tournament_id, boost_multiplier, ip_address)
       VALUES (
         ${userId},
         ${dayId},
@@ -57,7 +61,8 @@ export async function startGamePlay(userId: string, dayId: string): Promise<Game
           (SELECT multiplier FROM user_active_boost
            WHERE user_id = ${userId} AND expires_at > now()),
           100
-        )
+        ),
+        ${ipAddress}
       )
       RETURNING game_play_id, user_id, daily_tournament_id, boost_multiplier
     `;

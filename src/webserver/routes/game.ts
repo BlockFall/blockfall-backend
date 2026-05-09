@@ -1,3 +1,4 @@
+import type { Context } from 'hono';
 import { Hono } from 'hono';
 import { validator } from 'hono/validator';
 import { z } from 'zod';
@@ -10,6 +11,21 @@ import {
 import { dateFromId } from '../../utils/index.ts';
 import { authMiddleware, type AuthEnv } from '../middleware/auth.ts';
 
+// Cloudflare sets CF-Connecting-IP on every proxied request. X-Forwarded-For is
+// a comma-separated chain (client, proxy1, proxy2, …); the leftmost entry is
+// the original client. Both are spoofable if the origin is reachable directly —
+// lock the origin to Cloudflare IP ranges to make this trustworthy.
+function getClientIp(c: Context): string | null {
+  const cf = c.req.header('cf-connecting-ip');
+  if (cf) return cf.trim();
+  const xff = c.req.header('x-forwarded-for');
+  if (xff) {
+    const first = xff.split(',')[0]?.trim();
+    if (first) return first;
+  }
+  return null;
+}
+
 export const gameRoutes = new Hono<AuthEnv>()
   .use(authMiddleware)
 
@@ -18,7 +34,7 @@ export const gameRoutes = new Hono<AuthEnv>()
     const { user_id } = c.var.user;
 
     const dayId = await getOrCreateTodayTournament();
-    const gamePlay = await startGamePlay(user_id, dayId);
+    const gamePlay = await startGamePlay(user_id, dayId, getClientIp(c));
 
     if (!gamePlay) {
       return c.json({ error: 'Not enough energy' }, 400);
