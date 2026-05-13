@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { validator } from 'hono/validator';
 import { z } from 'zod';
+import { getActiveBooster } from '../../db/boosters.ts';
 import { getPendingPayouts } from '../../db/payouts.ts';
 import {
   findUserIdByAddress,
@@ -14,10 +15,11 @@ import { nameSchema } from './auth.ts';
 
 const getCachedUserResponse = makeSmartCached(
   async (userId: string) => {
-    const [user, inventory, pendingClaims] = await Promise.all([
+    const [user, inventory, pendingClaims, activeBooster] = await Promise.all([
       getUserWithNumbers(userId),
       getUserInventory(userId),
       getPendingPayouts(userId),
+      getActiveBooster(userId),
     ]);
     if (!user) return null;
 
@@ -38,6 +40,7 @@ const getCachedUserResponse = makeSmartCached(
       },
       inventory,
       pending_claims: pendingClaims,
+      active_booster: activeBooster,
     };
   },
   { cacheSeconds: 3, cacheSize: 15_000 }

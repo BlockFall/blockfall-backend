@@ -1,5 +1,5 @@
 import { BOOST_INFO_BY_ITEM_TYPE } from '../constants.ts';
-import { withTransaction } from './index.ts';
+import { sql, withTransaction } from './index.ts';
 
 // ---------------------------------------------------------------------------
 // Row types
@@ -25,6 +25,22 @@ export type ActivateBoosterOutcome =
 // ---------------------------------------------------------------------------
 // Queries
 // ---------------------------------------------------------------------------
+
+/**
+ * Returns the user's currently-active booster (latest activation whose window
+ * is still open), or null if none. Uses idx_user_booster_activations_latest.
+ */
+export async function getActiveBooster(userId: string): Promise<BoosterActivationRow | null> {
+  const rows = await sql<BoosterActivationRow[]>`
+    SELECT user_booster_activation_id, item_id, multiplier, started_at, expires_at
+    FROM   user_booster_activations
+    WHERE  user_id = ${userId}
+      AND  expires_at > now()
+    ORDER  BY user_booster_activation_id DESC
+    LIMIT  1
+  `;
+  return rows[0] ?? null;
+}
 
 /**
  * Activates a booster item owned by `userId`. Transactionally:
