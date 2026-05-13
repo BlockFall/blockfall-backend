@@ -105,18 +105,14 @@ export async function getUserWithNumbers(userId: string): Promise<UserWithNumber
       COALESCE(un.last_score,    0) AS last_score,
       COALESCE(un.games_played,  0) AS games_played,
       COALESCE(un.total_score,   0) AS total_score,
-      COALESCE(ts.today_score,   0) AS today_score,
+      CASE
+        WHEN un.today_score_date = (now() AT TIME ZONE 'UTC')::date
+          THEN un.today_score
+        ELSE 0
+      END                          AS today_score,
       COALESCE(un.energy,        0) AS energy
     FROM   users_with_data u
     LEFT JOIN user_numbers un ON un.user_id = u.user_id
-    LEFT JOIN LATERAL (
-      SELECT COALESCE(SUM(gpr.score), 0)::int AS today_score
-      FROM   game_plays gp
-      JOIN   game_play_results gpr ON gpr.game_play_id = gp.game_play_id
-      JOIN   daily_tournaments dt ON dt.daily_tournament_id = gp.daily_tournament_id
-      WHERE  gp.user_id = u.user_id
-        AND  dt.tournament_date = (now() AT TIME ZONE 'UTC')::date
-    ) ts ON true
     WHERE  u.user_id = ${userId}
   `;
   return rows[0] ?? null;
