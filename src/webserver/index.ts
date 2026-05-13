@@ -6,6 +6,7 @@ import { authRoutes } from './routes/auth.ts';
 import { checkinRoutes } from './routes/checkin.ts';
 import { gameRoutes } from './routes/game.ts';
 import { leaderboardRoutes } from './routes/leaderboard.ts';
+import { mysteryBoxRoutes } from './routes/mystery-box.ts';
 import { purchaseRoutes } from './routes/purchase.ts';
 import { checkUserRoute, userRoutes } from './routes/user.ts';
 import { userClaimsRoutes } from './routes/userClaims.ts';
@@ -21,7 +22,8 @@ const app = new Hono()
   .route('/purchase', purchaseRoutes)
   .route('/user_claims', userClaimsRoutes)
   .route('/checkin', checkinRoutes)
-  .route('/leaderboard', leaderboardRoutes);
+  .route('/leaderboard', leaderboardRoutes)
+  .route('/mystery-box', mysteryBoxRoutes);
 
 // Export the app type for use with hono/client on the frontend:
 //   import { hc } from 'hono/client'

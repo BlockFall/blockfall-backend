@@ -140,6 +140,20 @@ CREATE TABLE daily_total_scores (
   UNIQUE (user_id, score_date)
 );
 
+-- Mystery box items to be given out (no-update) (these are the "prizes" that can be won from mystery boxes)
+-- if it is given to a user, a record is inserted into mystery_box_given_items
+CREATE TABLE mystery_box_prizes (
+  mystery_box_prize_id BIGINT   DEFAULT generate_id() PRIMARY KEY,
+  item_type            INT      NOT NULL
+);
+-- Myster box items that have been given to users (no-update) (one record per mystery_box_prizes)
+-- First user_item_usages record should be added
+CREATE TABLE mystery_box_given_items (
+  given_item_id        BIGINT   DEFAULT generate_id() PRIMARY KEY,
+  mystery_box_prize_id BIGINT   NOT NULL UNIQUE REFERENCES mystery_box_prizes(mystery_box_prize_id),
+  item_usage_id        BIGINT   NOT NULL REFERENCES user_item_usages(item_usage_id)
+);
+
 -- Per-user stats (updateable) (recreateable summary) (high-churn row → HOT-update friendly)
 CREATE TABLE user_numbers (
     user_id           BIGINT  PRIMARY KEY REFERENCES users(user_id),

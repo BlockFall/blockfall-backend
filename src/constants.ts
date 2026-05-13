@@ -19,6 +19,7 @@ export const ENERGY_BY_ITEM_TYPE: Record<number, number> = {
   2: 10,
   3: 25,
   4: 50,
+  5: 5,
 };
 
 export const MYSTERY_BOX_ITEM_TYPE = 101;
@@ -58,3 +59,18 @@ export const DAILY_PAYOUT_TOKEN_ID = 1 as const; // USDT
 // USDT, required to trigger a payout. If total is below this, the day's
 // revenue rolls over to the next day's inherited_revenue.
 export const MIN_PAYOUT_THRESHOLD_USDT = '2';
+
+// Mystery box prize selected as next item from 40 randomized prizes in a batch (mystery_box_prizes)
+// If there is no more items to give, It should create 40 new items according to count and randomize them.
+// Record<itemId, { countInBatch: number }>
+export const MYSTERY_BOX_PRIZES = {
+  5: { countInBatch: 5 }, // 5 energy
+  2: { countInBatch: 3 }, // 10 energy
+  3: { countInBatch: 2 }, // 25 energy
+  4: { countInBatch: 1 }, // 50 energy
+  201: { countInBatch: 8 }, // 1.25x Boost (1 Hour)
+  202: { countInBatch: 6 }, // 1.25x Boost (3 Hour)
+  203: { countInBatch: 5 }, // 1.25x Boost (6 Hour)
+  204: { countInBatch: 6 }, // 1.5x Boost (1 Hour)
+  205: { countInBatch: 4 }, // 1.5x Boost (3 Hour)
+};
