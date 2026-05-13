@@ -43,27 +43,25 @@ async function runBan(tx: Sql, dailyTournamentId: string): Promise<string[]> {
       JOIN   game_play_results gpr ON gpr.game_play_id = gp.game_play_id
       WHERE  gp.daily_tournament_id = ${dailyTournamentId}
       GROUP BY gp.user_id
-      HAVING AVG(gpr.score) > ${AVG_SCORE_THRESHOLD}
+      HAVING AVG(gpr.score * 100.0 / gp.boost_multiplier) > ${AVG_SCORE_THRESHOLD}
          AND COUNT(*) > ${MIN_GAMES_FOR_AVG}
 
       UNION
 
-      -- Criterion 2: tight high-score cluster. Require >3 games so the
-      -- min/max range is meaningful — a single play has range 0 and would
-      -- otherwise trigger this on any score > 50k.
+      -- Criterion 2: tight high-score cluster on unboosted scores.
       SELECT gp.user_id
       FROM   game_plays gp
       JOIN   game_play_results gpr ON gpr.game_play_id = gp.game_play_id
       WHERE  gp.daily_tournament_id = ${dailyTournamentId}
       GROUP BY gp.user_id
       HAVING COUNT(*) > 3
-         AND MAX(gpr.score) - MIN(gpr.score) < ${SCORE_RANGE_MAX}
-         AND MIN(gpr.score) > ${MIN_SCORE_FOR_RANGE}
+         AND MAX(gpr.score * 100.0 / gp.boost_multiplier)
+           - MIN(gpr.score * 100.0 / gp.boost_multiplier) < ${SCORE_RANGE_MAX}
+         AND MIN(gpr.score * 100.0 / gp.boost_multiplier) > ${MIN_SCORE_FOR_RANGE}
 
       UNION
 
-      -- Criterion 3: every user playing from a shared IP with >20 distinct
-      -- accounts on it.
+      -- Criterion 3: every user playing from a shared IP with >20 distinct accounts on it.
       SELECT DISTINCT gp.user_id
       FROM   game_plays gp
       WHERE  gp.daily_tournament_id = ${dailyTournamentId}
