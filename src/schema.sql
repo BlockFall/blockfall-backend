@@ -2,7 +2,7 @@
 -- Blockfall Backend – PostgreSQL Schema
 -- ============================================================
 
--- Insert only design, no updates or deletes (except for user_numbers and user_active_boost)
+-- Insert only design, no updates or deletes (except for user_numbers)
 -- All IDs are k-orderd 63 bit (42-bit ms timestamp | 21-bit random)
 
 -- Users (no-update)
@@ -154,6 +154,16 @@ CREATE TABLE mystery_box_given_items (
   item_usage_id        BIGINT   NOT NULL REFERENCES user_item_usages(item_usage_id)
 );
 
+-- A new record is inserted here when user activates a booster (no-update)
+CREATE TABLE user_booster_activations (
+    user_booster_activation_id  BIGINT      DEFAULT generate_id() PRIMARY KEY,
+    user_id                     BIGINT      NOT NULL REFERENCES users(user_id),
+    item_id                     BIGINT      NOT NULL REFERENCES user_items(item_id),
+    multiplier                  INT         NOT NULL CHECK (multiplier > 1), -- used divided by 100 in calculations (e.g. 150 for 1.5x boost)
+    expires_at                  TIMESTAMPTZ NOT NULL,
+    started_at                  TIMESTAMPTZ GENERATED ALWAYS AS (date_from_id(user_booster_activation_id)) STORED
+);
+
 -- Per-user stats (updateable) (recreateable summary) (high-churn row → HOT-update friendly)
 CREATE TABLE user_numbers (
     user_id           BIGINT  PRIMARY KEY REFERENCES users(user_id),
@@ -167,15 +177,6 @@ CREATE TABLE user_numbers (
     updated_at        TIMESTAMPTZ
 ) WITH (fillfactor = 80);
 
--- User Boost information (updateable) (recreateable summary) (no record if no active boost)
-CREATE TABLE user_active_boost (
-    user_id     BIGINT      PRIMARY KEY REFERENCES users(user_id),
-    item_id     BIGINT      NOT NULL REFERENCES user_items(item_id),
-    multiplier  INT         NOT NULL CHECK (multiplier > 1), -- used divided by 100 in calculations (e.g. 150 for 1.5x boost)
-    started_at  TIMESTAMPTZ NOT NULL,
-    expires_at  TIMESTAMPTZ NOT NULL
-);
-
 -- ============================================================
 -- Indexes
 -- ============================================================
@@ -186,6 +187,8 @@ CREATE INDEX ON user_items (user_id);
 CREATE INDEX ON user_payouts (user_id);
 -- For user_mutable_data, we will often query the latest record for a user, so we index by user_id and user_change_id desc to optimize that query
 CREATE INDEX idx_user_mutable_data_latest ON user_mutable_data (user_id, user_change_id DESC);
+-- For user_booster_activations, we will often query the latest record for a user, so we index by user_id and user_booster_activation_id desc to optimize that query
+CREATE INDEX idx_user_booster_activations_latest ON user_booster_activations (user_id, user_booster_activation_id DESC);
 
 
 -- ============================================================

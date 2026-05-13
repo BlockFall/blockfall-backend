@@ -58,8 +58,12 @@ export async function startGamePlay(
         ${userId},
         ${dayId},
         COALESCE(
-          (SELECT multiplier FROM user_active_boost
-           WHERE user_id = ${userId} AND expires_at > now()),
+          (SELECT multiplier
+           FROM   user_booster_activations
+           WHERE  user_id = ${userId}
+             AND  expires_at > now()
+           ORDER  BY user_booster_activation_id DESC
+           LIMIT  1),
           100
         ),
         ${ipAddress}
