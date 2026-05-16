@@ -24,15 +24,48 @@ export interface CheckInResult {
 const DAILY_CHECK_IN_ENERGY = 1;
 
 /**
- * Returns the last seven UTC dates (including today) with a flag indicating
- * whether the user checked in that day.
+ * Returns the UTC dates in the user's current mystery-box cycle (each 7-day
+ * streak earns a mystery box and resets the displayed progress).
+ *
+ *  - Active streak of N days  → returns ((N - 1) % 7) + 1 days, ending today.
+ *    e.g. streak 10 → 3 days, streak 7 → 7 days, streak 8 → 1 day.
+ *  - No active streak (streak 0) → returns the last 7 UTC dates, all unchecked,
+ *    representing a fresh cycle to fill.
  */
-export async function getLastSevenDayCheckins(userId: string): Promise<CheckInDayRow[]> {
+export async function getCurrentCycleCheckins(userId: string): Promise<CheckInDayRow[]> {
   return sql<CheckInDayRow[]>`
+    WITH RECURSIVE streak_calc(d, n) AS (
+      SELECT (now() AT TIME ZONE 'UTC')::date,
+             CASE WHEN EXISTS (
+               SELECT 1 FROM daily_checkins
+               WHERE  user_id = ${userId}
+                 AND  check_in_date = (now() AT TIME ZONE 'UTC')::date
+             ) THEN 1 ELSE 0 END
+      UNION ALL
+      SELECT s.d - 1, s.n + 1
+      FROM   streak_calc s
+      WHERE  s.n > 0
+        AND  EXISTS (
+          SELECT 1 FROM daily_checkins
+          WHERE  user_id = ${userId}
+            AND  check_in_date = s.d - 1
+        )
+    ),
+    streak AS (
+      SELECT COALESCE(MAX(n), 0) AS value FROM streak_calc
+    ),
+    window_size AS (
+      SELECT CASE
+               WHEN value = 0 THEN 7
+               ELSE ((value - 1) % 7) + 1
+             END AS days
+      FROM   streak
+    )
     SELECT to_char(d::date, 'YYYY-MM-DD')   AS date,
            (c.check_in_date IS NOT NULL)    AS checked_in
     FROM   generate_series(
-             (now() AT TIME ZONE 'UTC')::date - INTERVAL '6 days',
+             (now() AT TIME ZONE 'UTC')::date
+               - ((SELECT days FROM window_size) - 1) * INTERVAL '1 day',
              (now() AT TIME ZONE 'UTC')::date,
              INTERVAL '1 day'
            ) AS d

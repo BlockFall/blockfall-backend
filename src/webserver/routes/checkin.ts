@@ -1,15 +1,16 @@
 import { Hono } from 'hono';
-import { getLastSevenDayCheckins, performDailyCheckin } from '../../db/daily-checkins.ts';
+import { getCurrentCycleCheckins, performDailyCheckin } from '../../db/daily-checkins.ts';
 import { authMiddleware, type AuthEnv } from '../middleware/auth.ts';
 
 export const checkinRoutes = new Hono<AuthEnv>()
   .use(authMiddleware)
 
-  // GET /checkin — last seven days (UTC) with a checked_in flag per date
+  // GET /checkin — current mystery-box cycle (1–7 UTC days) with a checked_in
+  // flag per date; resets after each 7-day streak.
   .get('/', async (c) => {
     const { user_id } = c.var.user;
 
-    const days = await getLastSevenDayCheckins(user_id);
+    const days = await getCurrentCycleCheckins(user_id);
     return c.json({ days });
   })
 
