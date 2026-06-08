@@ -32,6 +32,42 @@ export async function getBlock(blockNumber: bigint) {
   throw new Error('All RPC URLs failed for getBlock');
 }
 
+export async function getLatestBlockNumber(): Promise<bigint> {
+  for (const client of clients) {
+    try {
+      return await client.getBlockNumber();
+    } catch {
+      /* try next RPC */
+    }
+  }
+  throw new Error('All RPC URLs failed for getBlockNumber');
+}
+
+// Fetches ItemBought events emitted by the BlockFallGame contract in the
+// inclusive [fromBlock, toBlock] range. Logs are only emitted by successful
+// transactions, so anything returned here is a confirmed, on-contract buy.
+export async function getItemBoughtLogs(fromBlock: bigint, toBlock: bigint) {
+  for (const client of clients) {
+    try {
+      return await client.getContractEvents({
+        address: BLOCKFALL_GAME_ADDRESS as `0x${string}`,
+        abi: blockFallGameAbi,
+        eventName: 'ItemBought',
+        fromBlock,
+        toBlock,
+        // Only return logs whose args fully decode against the event signature,
+        // which also makes log.args non-partial for the consumer.
+        strict: true,
+      });
+    } catch {
+      /* try next RPC */
+    }
+  }
+  throw new Error('All RPC URLs failed for getItemBoughtLogs');
+}
+
+export type ItemBoughtLog = Awaited<ReturnType<typeof getItemBoughtLogs>>[number];
+
 let cachedSeed: `0x${string}` | null = null;
 
 // SEED is an immutable bytes32 set at contract deploy time, so it's safe to

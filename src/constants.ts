@@ -24,6 +24,10 @@ export const ENERGY_BY_ITEM_TYPE: Record<number, number> = {
 
 export const MYSTERY_BOX_ITEM_TYPE = 101;
 
+// Item types accepted by the purchase flow (/purchase/submit and the ItemBought
+// sync job). Buys for any other item type are ignored as unsupported.
+export const VALID_PURCHASE_ITEM_TYPES = new Set([1, 2, 3, 4, 5]);
+
 export const BOOST_INFO_BY_ITEM_TYPE: Record<
   number,
   { multiplier: number; durationMinutes: number }

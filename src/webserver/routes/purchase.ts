@@ -3,12 +3,14 @@ import { validator } from 'hono/validator';
 import { formatUnits, parseEventLogs } from 'viem';
 import { z } from 'zod';
 import blockFallGameAbi from '../../abis/blockfall-game.abi.ts';
-import { BLOCKFALL_GAME_ADDRESS, PAYMENT_TOKENS } from '../../constants.ts';
+import {
+  BLOCKFALL_GAME_ADDRESS,
+  PAYMENT_TOKENS,
+  VALID_PURCHASE_ITEM_TYPES,
+} from '../../constants.ts';
 import { findTransactionByHash, processPurchase } from '../../db/purchases.ts';
 import { getBlock, getTransactionReceipt } from '../../utils/celo-rpc-reader.ts';
 import { authMiddleware, type AuthEnv } from '../middleware/auth.ts';
-
-const VALID_ITEM_TYPES = new Set([1, 2, 3, 4, 5]);
 
 export const purchaseRoutes = new Hono<AuthEnv>()
   .use(authMiddleware)
@@ -75,7 +77,7 @@ export const purchaseRoutes = new Hono<AuthEnv>()
       }
 
       // 6. Validate item type
-      if (!VALID_ITEM_TYPES.has(itemTypeId)) {
+      if (!VALID_PURCHASE_ITEM_TYPES.has(itemTypeId)) {
         return c.json({ error: 'Invalid item type' }, 400);
       }
 

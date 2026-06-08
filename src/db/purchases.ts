@@ -16,6 +16,19 @@ export async function findTransactionByHash(txHash: string): Promise<boolean> {
 }
 
 /**
+ * Given a list of tx hashes, returns the subset that already exist in
+ * user_transactions. Single round-trip via `= ANY(...)`, used by the
+ * ItemBought sync job to find which on-chain buys are still unprocessed.
+ */
+export async function findExistingTxHashes(txHashes: string[]): Promise<Set<string>> {
+  if (txHashes.length === 0) return new Set();
+  const rows = await sql<{ tx_hash: string }[]>`
+    SELECT tx_hash FROM user_transactions WHERE tx_hash = ANY(${txHashes})
+  `;
+  return new Set(rows.map((r) => r.tx_hash));
+}
+
+/**
  * Processes a purchase transaction. Transactionally:
  * 1. Inserts into user_transactions
  * 2. If energy package (itemTypeId 1-4): inserts energy_issuance, increments user energy
