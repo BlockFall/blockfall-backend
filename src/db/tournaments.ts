@@ -89,7 +89,7 @@ export async function insertDailyTotalScores(
 }
 
 /**
- * Top 50 ranked players for the given tournament date, joined with their
+ * Top 25 ranked players for the given tournament date, joined with their
  * on-chain address. Order by rank ascending, ties broken by user_id for a
  * deterministic order.
  */
@@ -105,7 +105,7 @@ export async function fetchTopRankedPlayers(
     FROM   daily_total_scores dts
     JOIN   users u ON u.user_id = dts.user_id
     WHERE  dts.score_date = ${tournamentDate}::date
-      AND  dts.rank <= 50
+      AND  dts.rank <= 25
     ORDER BY dts.rank, dts.user_id
   `;
 }

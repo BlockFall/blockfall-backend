@@ -9,7 +9,7 @@ import {
 import { makeSmartCached } from '../../utils/smart-cache.ts';
 import { authMiddleware, type AuthEnv } from '../middleware/auth.ts';
 
-const TOP_N = 50;
+const TOP_N = 25;
 
 const getCachedLeaderboards = makeSmartCached(
   async () => {

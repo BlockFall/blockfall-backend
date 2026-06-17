@@ -62,7 +62,7 @@ export const DAILY_PAYOUT_TOKEN_ID = 1 as const; // USDT
 // Minimum total revenue (revenue + inherited_revenue), in human-readable
 // USDT, required to trigger a payout. If total is below this, the day's
 // revenue rolls over to the next day's inherited_revenue.
-export const MIN_PAYOUT_THRESHOLD_USDT = '2';
+export const MIN_PAYOUT_THRESHOLD_USDT = '0.5';
 
 // Mystery box prize selected as next item from 40 randomized prizes in a batch (mystery_box_prizes)
 // If there is no more items to give, It should create 40 new items according to count and randomize them.

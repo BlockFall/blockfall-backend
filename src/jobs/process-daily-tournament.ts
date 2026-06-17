@@ -24,7 +24,6 @@ import { banSuspiciousUsers } from './ban-suspicious-users.ts';
 export const PROCESS_TOURNAMENT_INTERVAL_MS = 10 * 60 * 1000;
 
 // keccak256("claim") — selector mixed into every claim signature payload.
-// Hard-coded so we don't recompute it 50 times per run.
 const CLAIM_SELECTOR = keccak256(toBytes('claim'));
 
 // Percentages have at most 3 decimal places (see distribution-rates.ts).
@@ -50,7 +49,7 @@ export function getPrivateKey(): `0x${string}` {
  * Picks the oldest unprocessed daily tournament (strictly before today UTC)
  * and processes it: writes daily_total_scores, computes revenue + inherited
  * revenue, and (if total revenue clears MIN_PAYOUT_THRESHOLD_USDT) signs and
- * inserts user_payouts for the top-50 ranked players. Always finalises by
+ * inserts user_payouts for the top-25 ranked players. Always finalises by
  * inserting daily_tournament_results, which marks the tournament processed.
  *
  * Concurrency: every step inside the transaction sits behind a
