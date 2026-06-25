@@ -4,9 +4,9 @@ import { withTransaction } from '../db/index.ts';
 type Sql = postgres.Sql | postgres.ReservedSql | postgres.TransactionSql;
 
 // Criteria thresholds — tweak here if cheating patterns shift.
-const AVG_SCORE_THRESHOLD = 100_000;
+const AVG_SCORE_THRESHOLD = 200_000;
 const MIN_GAMES_FOR_AVG = 3;
-const SCORE_RANGE_MAX = 10_000;
+const SCORE_RANGE_MAX = 15_000;
 const MIN_SCORE_FOR_RANGE = 50_000;
 const MAX_USERS_PER_IP = 20;
 
@@ -17,8 +17,8 @@ const MAX_USERS_PER_IP = 20;
  * banned users are skipped so re-runs don't create duplicate ban rows.
  *
  * Criteria (any one match → ban):
- *  1. Average score > 100k AND >3 completed games — sustained high scores.
- *  2. Score range (max-min) < 10k AND min score > 50k across > 3 games —
+ *  1. Average score > 200k AND >3 completed games — sustained high scores.
+ *  2. Score range (max-min) < 15k AND min score > 50k across > 3 games —
  *     suspiciously tight cluster at a high level (bot-like).
  *  3. All users sharing an IP that >20 distinct accounts played from —
  *     multi-accounting / farm.
