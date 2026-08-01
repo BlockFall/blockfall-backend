@@ -68,6 +68,29 @@ export async function getItemBoughtLogs(fromBlock: bigint, toBlock: bigint) {
 
 export type ItemBoughtLog = Awaited<ReturnType<typeof getItemBoughtLogs>>[number];
 
+// Fetches Claimed events emitted by the BlockFallGame contract in the
+// inclusive [fromBlock, toBlock] range. Same guarantees as getItemBoughtLogs:
+// only successful transactions emit logs.
+export async function getClaimedLogs(fromBlock: bigint, toBlock: bigint) {
+  for (const client of clients) {
+    try {
+      return await client.getContractEvents({
+        address: BLOCKFALL_GAME_ADDRESS as `0x${string}`,
+        abi: blockFallGameAbi,
+        eventName: 'Claimed',
+        fromBlock,
+        toBlock,
+        strict: true,
+      });
+    } catch {
+      /* try next RPC */
+    }
+  }
+  throw new Error('All RPC URLs failed for getClaimedLogs');
+}
+
+export type ClaimedLog = Awaited<ReturnType<typeof getClaimedLogs>>[number];
+
 let cachedSeed: `0x${string}` | null = null;
 
 // SEED is an immutable bytes32 set at contract deploy time, so it's safe to

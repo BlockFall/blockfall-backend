@@ -186,7 +186,7 @@ function buildPayouts(players: RankedPlayerRow[], usedForPayoutWei: bigint): Bui
   return result;
 }
 
-function randomActionId(): bigint {
+export function randomActionId(): bigint {
   return BigInt('0x' + crypto.randomBytes(32).toString('hex'));
 }
 
@@ -195,7 +195,7 @@ function randomActionId(): bigint {
  * actionId, msg.sender, paymentToken, amount)) wrapped in the EIP-191
  * "\x19Ethereum Signed Message:\n32" prefix (MessageHashUtils.toEthSignedMessageHash).
  */
-async function signClaim(
+export async function signClaim(
   signer: ReturnType<typeof privateKeyToAccount>,
   seed: `0x${string}`,
   actionId: bigint,

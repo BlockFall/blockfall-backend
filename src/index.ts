@@ -3,6 +3,7 @@ import {
   PROCESS_TOURNAMENT_INTERVAL_MS,
   runDailyTournamentJob,
 } from './jobs/process-daily-tournament.ts';
+import { runSyncClaimJob, SYNC_CLAIM_INTERVAL_MS } from './jobs/sync-claim-events.ts';
 import {
   runSyncItemBoughtJob,
   SYNC_ITEM_BOUGHT_INTERVAL_MS,
@@ -22,6 +23,11 @@ maintainAsyncJob(runDailyTournamentJob, PROCESS_TOURNAMENT_INTERVAL_MS).catch((e
 
 maintainAsyncJob(runSyncItemBoughtJob, SYNC_ITEM_BOUGHT_INTERVAL_MS).catch((err: unknown) => {
   console.error('sync item bought job error:', err);
+  process.exit(1);
+});
+
+maintainAsyncJob(runSyncClaimJob, SYNC_CLAIM_INTERVAL_MS).catch((err: unknown) => {
+  console.error('sync claim job error:', err);
   process.exit(1);
 });
 
