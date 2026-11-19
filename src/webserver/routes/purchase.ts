@@ -1,15 +1,12 @@
 import { Hono } from 'hono';
 import { validator } from 'hono/validator';
-import { formatUnits, parseEventLogs } from 'viem';
+import { parseEventLogs } from 'viem';
 import { z } from 'zod';
 import blockFallGameAbi from '../../abis/blockfall-game.abi.ts';
-import {
-  BLOCKFALL_GAME_ADDRESS,
-  PAYMENT_TOKENS,
-  VALID_PURCHASE_ITEM_TYPES,
-} from '../../constants.ts';
+import { BLOCKFALL_GAME_ADDRESS, VALID_PURCHASE_ITEM_TYPES } from '../../constants.ts';
 import { findTransactionByHash, processPurchase } from '../../db/purchases.ts';
 import { getBlock, getTransactionReceipt } from '../../utils/celo-rpc-reader.ts';
+import { revenueUsdForPayment } from '../../utils/pricing.ts';
 import { authMiddleware, type AuthEnv } from '../middleware/auth.ts';
 
 export const purchaseRoutes = new Hono<AuthEnv>()
@@ -94,10 +91,8 @@ export const purchaseRoutes = new Hono<AuthEnv>()
         price,
       };
 
-      const paymentToken = Object.values(PAYMENT_TOKENS).find(
-        (t) => t.address.toLowerCase() === event.args.paymentToken.toLowerCase()
-      );
-      const revenue = paymentToken ? formatUnits(event.args.price, paymentToken.decimals) : '0';
+      // Revenue is stored in USD; G$ payments are normalised with GD_PER_USD.
+      const revenue = revenueUsdForPayment(event.args.paymentToken, event.args.price);
 
       const result = await processPurchase(
         user_id,

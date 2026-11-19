@@ -5,6 +5,7 @@ import config from '../config.ts';
 import { authRoutes } from './routes/auth.ts';
 import { boosterRoutes } from './routes/booster.ts';
 import { checkinRoutes } from './routes/checkin.ts';
+import { convertRoutes } from './routes/convert.ts';
 import { gameRoutes } from './routes/game.ts';
 import { leaderboardRoutes } from './routes/leaderboard.ts';
 import { mysteryBoxRoutes } from './routes/mystery-box.ts';
@@ -22,6 +23,7 @@ const app = new Hono()
   .route('/game', gameRoutes)
   .route('/purchase', purchaseRoutes)
   .route('/user_claims', userClaimsRoutes)
+  .route('/convert', convertRoutes)
   .route('/checkin', checkinRoutes)
   .route('/leaderboard', leaderboardRoutes)
   .route('/mystery-box', mysteryBoxRoutes)

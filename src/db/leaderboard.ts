@@ -15,6 +15,8 @@ export interface LeaderboardEntry {
 
 export interface YesterdayLeaderboardEntry extends LeaderboardEntry {
   reward: string | null;
+  /** PAYMENT_TOKENS id of the reward: 1=USDT, 2=USDC, 3=USDm, 4=G$. */
+  reward_token: number | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -29,7 +31,13 @@ export async function fetchYesterdayLeaderboard(): Promise<YesterdayLeaderboardE
            u.address,
            dts.total_score,
            dts.rank,
-           TRUNC(p.amount / 10.0 ^ 6, 3) AS reward
+           -- USDT/USDC have 6 decimals; USDm and G$ have 18. G$ amounts are
+           -- large, so they are shown without decimals.
+           CASE WHEN p.payment_token IN (3, 4)
+                THEN TRUNC(p.amount / 10.0 ^ 18, CASE WHEN p.payment_token = 4 THEN 0 ELSE 3 END)
+                ELSE TRUNC(p.amount / 10.0 ^ 6, 3)
+           END AS reward,
+           p.payment_token::int AS reward_token
     FROM   daily_total_scores dts
     JOIN   users_with_data u ON u.user_id = dts.user_id
     LEFT JOIN daily_tournaments dt ON dt.tournament_date = dts.score_date

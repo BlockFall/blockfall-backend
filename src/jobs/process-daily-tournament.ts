@@ -1,8 +1,5 @@
-import crypto from 'node:crypto';
-import { encodePacked, formatUnits, keccak256, parseUnits, toBytes, toHex } from 'viem';
-import { privateKeyToAccount } from 'viem/accounts';
-import config from '../config.ts';
-import { DAILY_PAYOUT_TOKEN_ID, MIN_PAYOUT_THRESHOLD_USDT, PAYMENT_TOKENS } from '../constants.ts';
+import { formatUnits, parseUnits, toHex } from 'viem';
+import { DAILY_PAYOUT_TOKEN_ID, MIN_PAYOUT_THRESHOLD_USD, PAYMENT_TOKENS } from '../constants.ts';
 import { withTransaction } from '../db/index.ts';
 import {
   fetchDayRevenue,
@@ -17,39 +14,30 @@ import {
 } from '../db/tournaments.ts';
 import { getPercentageByRank } from '../distribution-rates.ts';
 import { getBlockfallSeed } from '../utils/celo-rpc-reader.ts';
-import { decrypt } from '../utils/encryption.ts';
+import { usdToTokenWei } from '../utils/pricing.ts';
+import { getSigner, randomActionId, signClaim } from '../utils/signer.ts';
 import { banSuspiciousUsers } from './ban-suspicious-users.ts';
 
 // Run cadence — index.ts schedules this with maintainAsyncJob.
 export const PROCESS_TOURNAMENT_INTERVAL_MS = 10 * 60 * 1000;
-
-// keccak256("claim") — selector mixed into every claim signature payload.
-const CLAIM_SELECTOR = keccak256(toBytes('claim'));
 
 // Percentages have at most 3 decimal places (see distribution-rates.ts).
 // Multiplying by 1000 converts them into integer "milli-percent" so we can do
 // the per-rank multiplication in BigInt without losing precision.
 const PERCENTAGE_SCALE = 1000n;
 
-const payoutToken = PAYMENT_TOKENS[DAILY_PAYOUT_TOKEN_ID];
+// Revenue is stored in USD (NUMERIC). We do the arithmetic in 18-decimal
+// fixed point so G$-derived revenue (USD = G$ / GD_PER_USD) keeps precision.
+const USD_DECIMALS = 18;
 
-export function getPrivateKey(): `0x${string}` {
-  const pass = decrypt(config.ENCRYPTED_PASS, 'x7hks4ji');
-  if (!pass) {
-    throw new Error('PASS environment variable is not set');
-  }
-  const decrypted = decrypt(config.ENCRYPTED_SIGNER_PRIVATE_KEY, pass);
-  if (!decrypted.startsWith('0x')) {
-    return ('0x' + decrypted) as `0x${string}`;
-  }
-  return decrypted as `0x${string}`;
-}
+const payoutToken = PAYMENT_TOKENS[DAILY_PAYOUT_TOKEN_ID];
 
 /**
  * Picks the oldest unprocessed daily tournament (strictly before today UTC)
  * and processes it: writes daily_total_scores, computes revenue + inherited
- * revenue, and (if total revenue clears MIN_PAYOUT_THRESHOLD_USDT) signs and
- * inserts user_payouts for the top-25 ranked players. Always finalises by
+ * revenue, and (if total revenue clears MIN_PAYOUT_THRESHOLD_USD) signs and
+ * inserts user_payouts in DAILY_PAYOUT_TOKEN_ID for the top-25 ranked players
+ * (USD pool converted to that token). Always finalises by
  * inserting daily_tournament_results, which marks the tournament processed.
  *
  * Concurrency: every step inside the transaction sits behind a
@@ -68,7 +56,7 @@ export async function processDailyTournamentTick(): Promise<string | null> {
   // SEED is fetched once and cached. Doing it before opening the transaction
   // keeps the RPC call out of the transaction's lock window.
   const seed = await getBlockfallSeed();
-  const signer = privateKeyToAccount(getPrivateKey());
+  const signer = getSigner();
 
   await withTransaction(async (tx) => {
     await tx`SELECT pg_advisory_xact_lock(${tournament.daily_tournament_id}::bigint)`;
@@ -95,14 +83,13 @@ export async function processDailyTournamentTick(): Promise<string | null> {
     // Inherited revenue rolls over only if the previous day's payout was
     // skipped (used_for_payout = 0).
     const inheritedRevenueWei =
-      prev && parseUnits(prev.used_for_payout, payoutToken.decimals) === 0n
-        ? parseUnits(prev.revenue, payoutToken.decimals) +
-          parseUnits(prev.inherited_revenue, payoutToken.decimals)
+      prev && parseUnits(prev.used_for_payout, USD_DECIMALS) === 0n
+        ? parseUnits(prev.revenue, USD_DECIMALS) + parseUnits(prev.inherited_revenue, USD_DECIMALS)
         : 0n;
 
-    const revenueWei = parseUnits(dayRevenue, payoutToken.decimals);
+    const revenueWei = parseUnits(dayRevenue, USD_DECIMALS);
     const totalRevenueWei = revenueWei + inheritedRevenueWei;
-    const thresholdWei = parseUnits(MIN_PAYOUT_THRESHOLD_USDT, payoutToken.decimals);
+    const thresholdWei = parseUnits(MIN_PAYOUT_THRESHOLD_USD, USD_DECIMALS);
 
     // We pay out only if there's enough revenue AND there are players to pay.
     // No-players-but-revenue (rare edge case) rolls over to next day rather
@@ -111,11 +98,19 @@ export async function processDailyTournamentTick(): Promise<string | null> {
     const usedForPayoutWei = willPayOut ? totalRevenueWei : 0n;
 
     if (willPayOut) {
-      const payouts = buildPayouts(topPlayers, usedForPayoutWei);
+      const payoutPoolWei = usdToTokenWei(usedForPayoutWei, USD_DECIMALS, DAILY_PAYOUT_TOKEN_ID);
+      const payouts = buildPayouts(topPlayers, payoutPoolWei);
       const signedPayouts = await Promise.all(
         payouts.map(async (p) => ({
           ...p,
-          signature: await signClaim(signer, seed, p.actionIdBigInt, p.address, p.amountWei),
+          signature: await signClaim(
+            signer,
+            seed,
+            p.actionIdBigInt,
+            p.address,
+            payoutToken.address,
+            p.amountWei
+          ),
         }))
       );
 
@@ -134,8 +129,8 @@ export async function processDailyTournamentTick(): Promise<string | null> {
       tx,
       tournament.daily_tournament_id,
       dayRevenue,
-      formatUnits(inheritedRevenueWei, payoutToken.decimals),
-      formatUnits(usedForPayoutWei, payoutToken.decimals)
+      formatUnits(inheritedRevenueWei, USD_DECIMALS),
+      formatUnits(usedForPayoutWei, USD_DECIMALS)
     );
   });
 
@@ -163,7 +158,7 @@ interface BuiltPayout {
   action_id: string;
 }
 
-function buildPayouts(players: RankedPlayerRow[], usedForPayoutWei: bigint): BuiltPayout[] {
+function buildPayouts(players: RankedPlayerRow[], payoutPoolWei: bigint): BuiltPayout[] {
   const result: BuiltPayout[] = [];
   for (const player of players) {
     const percentage = getPercentageByRank(player.rank);
@@ -171,7 +166,7 @@ function buildPayouts(players: RankedPlayerRow[], usedForPayoutWei: bigint): Bui
 
     const percentageScaled = BigInt(Math.round(percentage * Number(PERCENTAGE_SCALE)));
     // Total scale: 100 (percent) * PERCENTAGE_SCALE
-    const amountWei = (usedForPayoutWei * percentageScaled) / (100n * PERCENTAGE_SCALE);
+    const amountWei = (payoutPoolWei * percentageScaled) / (100n * PERCENTAGE_SCALE);
     if (amountWei === 0n) continue;
 
     const actionIdBigInt = randomActionId();
@@ -184,36 +179,4 @@ function buildPayouts(players: RankedPlayerRow[], usedForPayoutWei: bigint): Bui
     });
   }
   return result;
-}
-
-export function randomActionId(): bigint {
-  return BigInt('0x' + crypto.randomBytes(32).toString('hex'));
-}
-
-/**
- * Mirrors the on-chain hash: keccak256(abi.encodePacked(SEED, keccak256("claim"),
- * actionId, msg.sender, paymentToken, amount)) wrapped in the EIP-191
- * "\x19Ethereum Signed Message:\n32" prefix (MessageHashUtils.toEthSignedMessageHash).
- */
-export async function signClaim(
-  signer: ReturnType<typeof privateKeyToAccount>,
-  seed: `0x${string}`,
-  actionId: bigint,
-  recipient: string,
-  amountWei: bigint
-): Promise<string> {
-  const innerHash = keccak256(
-    encodePacked(
-      ['bytes32', 'bytes32', 'uint256', 'address', 'address', 'uint256'],
-      [
-        seed,
-        CLAIM_SELECTOR,
-        actionId,
-        recipient as `0x${string}`,
-        payoutToken.address as `0x${string}`,
-        amountWei,
-      ]
-    )
-  );
-  return signer.signMessage({ message: { raw: innerHash } });
 }

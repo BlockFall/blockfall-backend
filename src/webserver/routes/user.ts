@@ -15,7 +15,7 @@ import { nameSchema } from './auth.ts';
 
 const getCachedUserResponse = makeSmartCached(
   async (userId: string) => {
-    const [user, inventory, pendingClaims, activeBooster] = await Promise.all([
+    const [user, inventory, pendingPayouts, activeBooster] = await Promise.all([
       getUserWithNumbers(userId),
       getUserInventory(userId),
       getPendingPayouts(userId),
@@ -39,7 +39,11 @@ const getCachedUserResponse = makeSmartCached(
         energy: user.energy,
       },
       inventory,
-      pending_claims: pendingClaims,
+      // Daily rewards only. The old stablecoin frontend renders every entry
+      // here and only knows USDT/USDC/USDm, so G$ conversion payouts are kept
+      // in their own field that only the G$ frontend reads.
+      pending_claims: pendingPayouts.filter((p) => p.payout_type !== 'conversion'),
+      pending_conversions: pendingPayouts.filter((p) => p.payout_type === 'conversion'),
       active_booster: activeBooster,
     };
   },

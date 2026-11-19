@@ -1,9 +1,9 @@
 import path from 'node:path';
-import { formatUnits } from 'viem';
-import { PAYMENT_TOKENS, VALID_PURCHASE_ITEM_TYPES } from '../constants.ts';
+import { VALID_PURCHASE_ITEM_TYPES } from '../constants.ts';
 import { processPurchase } from '../db/purchases.ts';
 import { findUserIdByAddress } from '../db/users.ts';
 import { getItemBoughtLogs, type ItemBoughtLog } from '../utils/celo-rpc-reader.ts';
+import { revenueUsdForPayment } from '../utils/pricing.ts';
 import { getBlockTime, runBlockScan } from './block-scanner.ts';
 
 // Run cadence — index.ts schedules this with maintainAsyncJob.
@@ -55,10 +55,7 @@ async function processItemBoughtLog(
     price: log.args.price.toString(),
   };
 
-  const paymentToken = Object.values(PAYMENT_TOKENS).find(
-    (t) => t.address.toLowerCase() === log.args.paymentToken.toLowerCase()
-  );
-  const revenue = paymentToken ? formatUnits(log.args.price, paymentToken.decimals) : '0';
+  const revenue = revenueUsdForPayment(log.args.paymentToken, log.args.price);
 
   await processPurchase(userId, log.transactionHash, txTime, revenue, itemTypeId, eventParams);
 

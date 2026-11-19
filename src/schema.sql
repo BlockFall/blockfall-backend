@@ -115,10 +115,10 @@ CREATE TABLE user_item_usages (
 CREATE TABLE user_payouts (
     payout_id            BIGINT      DEFAULT generate_id() PRIMARY KEY,
     user_id              BIGINT      NOT NULL REFERENCES users(user_id),
-    payout_type          TEXT        NOT NULL CHECK (payout_type IN ('daily_reward')),
+    payout_type          TEXT        NOT NULL CHECK (payout_type IN ('daily_reward', 'conversion')),
     action_id            TEXT        NOT NULL UNIQUE,  -- unique uint256 as hex string
     amount               NUMERIC     NOT NULL,
-    payment_token        SMALLINT    NOT NULL, -- 1=USDT, 2=USDC, 3=USDm
+    payment_token        SMALLINT    NOT NULL, -- 1=USDT, 2=USDC, 3=USDm, 4=G$
     signature            TEXT        NOT NULL,
     daily_tournament_id  BIGINT      REFERENCES daily_tournaments(daily_tournament_id) -- for daily rewards
 );
@@ -128,6 +128,32 @@ CREATE TABLE user_claims (
     claim_id             BIGINT   DEFAULT generate_id() PRIMARY KEY,
     payout_id            BIGINT   NOT NULL UNIQUE REFERENCES user_payouts(payout_id),
     claim_transaction_id BIGINT   NOT NULL REFERENCES user_transactions(transaction_id)
+);
+
+-- Signed deposit requests (no-update). Created when a user asks to deposit;
+-- holds the backend-signed params for the on-chain deposit() call. The
+-- deposit_type decides what the deposit is for and whether it produces a
+-- payout (see DEPOSIT_TYPES in constants.ts). Conversions (e.g. usdt_to_gd)
+-- are paid out as a 'conversion' user_payouts row once confirmed.
+CREATE TABLE user_deposits (
+    deposit_id            BIGINT      DEFAULT generate_id() PRIMARY KEY, -- has created_at in it
+    user_id               BIGINT      NOT NULL REFERENCES users(user_id),
+    deposit_type          TEXT        NOT NULL CHECK (deposit_type IN ('usdt_to_gd', 'usdc_to_gd', 'usdm_to_gd')),
+    action_id             TEXT        NOT NULL UNIQUE,  -- unique uint256 as hex string
+    payment_token         SMALLINT    NOT NULL,         -- token deposited: 1=USDT, 2=USDC, 3=USDm, 4=G$
+    amount                NUMERIC     NOT NULL CHECK (amount > 0),  -- deposited token, smallest unit
+    quoted_payout_amount  NUMERIC     CHECK (quoted_payout_amount > 0), -- payout token smallest unit; NULL for types without a payout
+    signature             TEXT        NOT NULL,
+    expires_at            TIMESTAMPTZ NOT NULL          -- frontend must not submit the deposit after this
+);
+
+-- Confirmed on-chain deposits (no-update) (one-to-one with user_deposits).
+-- The payout (if the deposit type has one) is inserted in the same transaction.
+CREATE TABLE user_deposit_confirmations (
+    confirmation_id        BIGINT DEFAULT generate_id() PRIMARY KEY,
+    deposit_id             BIGINT NOT NULL UNIQUE REFERENCES user_deposits(deposit_id),
+    deposit_transaction_id BIGINT NOT NULL REFERENCES user_transactions(transaction_id),
+    payout_id              BIGINT UNIQUE REFERENCES user_payouts(payout_id) -- NULL for deposit types without a payout
 );
 
 -- Daily total scores (no-update)
@@ -185,6 +211,7 @@ CREATE INDEX ON game_plays (user_id, daily_tournament_id);
 CREATE INDEX ON energy_issuance (user_id);
 CREATE INDEX ON user_items (user_id);
 CREATE INDEX ON user_payouts (user_id);
+CREATE INDEX ON user_deposits (user_id);
 -- For user_mutable_data, we will often query the latest record for a user, so we index by user_id and user_change_id desc to optimize that query
 CREATE INDEX idx_user_mutable_data_latest ON user_mutable_data (user_id, user_change_id DESC);
 -- For user_booster_activations, we will often query the latest record for a user, so we index by user_id and user_booster_activation_id desc to optimize that query
