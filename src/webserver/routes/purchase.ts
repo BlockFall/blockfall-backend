@@ -91,7 +91,7 @@ export const purchaseRoutes = new Hono<AuthEnv>()
         price,
       };
 
-      // Revenue is stored in USD; G$ payments are normalised with GD_PER_USD.
+      // Revenue is stored in USD; G$ payments are normalised with GD_PER_USD_ITEM.
       const revenue = revenueUsdForPayment(event.args.paymentToken, event.args.price);
 
       const result = await processPurchase(

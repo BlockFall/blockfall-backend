@@ -10,7 +10,9 @@ import {
   DAILY_PAYOUT_TOKEN_ID,
   DEPOSIT_TTL_MS,
   DEPOSIT_TYPES,
-  GD_PER_USD,
+  GD_PER_USD_BUY,
+  GD_PER_USD_ITEM,
+  GD_PER_USD_SELL,
   GD_TOKEN_ID,
   PAYMENT_TOKENS,
   STABLE_TOKEN_IDS,
@@ -22,9 +24,14 @@ import {
   getDepositPayout,
   insertDeposit,
 } from '../../db/deposits.ts';
-import { confirmDepositEvent, DepositMismatchError, findConversionType } from '../../deposits.ts';
+import {
+  confirmDepositEvent,
+  CONVERSION_TYPES,
+  DepositMismatchError,
+  isDepositType,
+} from '../../deposits.ts';
 import { getBlock, getBlockfallSeed, getTransactionReceipt } from '../../utils/celo-rpc-reader.ts';
-import { stableToGdWei } from '../../utils/pricing.ts';
+import { quoteConversion } from '../../utils/pricing.ts';
 import { getSigner, randomActionId, signDeposit } from '../../utils/signer.ts';
 import { authMiddleware, type AuthEnv } from '../middleware/auth.ts';
 
@@ -35,22 +42,37 @@ const minUsdWei = parseUnits(CONVERT_MIN_USD, 18);
 const maxUsdWei = parseUnits(CONVERT_MAX_USD, 18);
 
 /**
- * Stablecoin → G$ conversion. Two on-chain transactions, both signed by the
- * backend:
- *   1. POST /convert/request → signed deposit() params; user deposits stablecoin
- *   2. POST /convert/submit  → verifies the Deposited event and returns a signed
- *      G$ claim() payout (also listed in GET /user pending_claims), which the
- *      user then claims through the normal /user_claims flow.
+ * Conversions between stablecoins and G$, in both directions. Two on-chain
+ * transactions, both signed by the backend:
+ *   1. POST /convert/request → signed deposit() params; user deposits the
+ *      "from" token (stablecoin for *_to_gd, G$ for gd_to_*)
+ *   2. POST /convert/submit  → verifies the Deposited event and returns the
+ *      signed claim() payout in the "to" token (also listed in GET /user
+ *      pending_conversions), which the user claims through /user_claims.
+ * Rates: stablecoin → G$ at GD_PER_USD_BUY, G$ → stablecoin at GD_PER_USD_SELL.
  */
 export const convertRoutes = new Hono<AuthEnv>()
-  // GET /convert/config — public: rate, limits and supported tokens
+  // GET /convert/config — public: rates, limits and supported conversions
   .get('/config', (c) =>
     c.json({
-      gd_per_usd: GD_PER_USD.toString(),
+      rates: {
+        // G$ per 1 USD
+        item: GD_PER_USD_ITEM.toString(),
+        buy: GD_PER_USD_BUY.toString(),
+        sell: GD_PER_USD_SELL.toString(),
+      },
       min_usd: CONVERT_MIN_USD,
       max_usd: CONVERT_MAX_USD,
       gd_token: { id: GD_TOKEN_ID, ...PAYMENT_TOKENS[GD_TOKEN_ID] },
       stable_tokens: STABLE_TOKEN_IDS.map((id) => ({ id, ...PAYMENT_TOKENS[id] })),
+      conversions: CONVERSION_TYPES.map((type) => {
+        const def = DEPOSIT_TYPES[type];
+        return {
+          deposit_type: type,
+          from_token: { id: def.depositToken, ...PAYMENT_TOKENS[def.depositToken] },
+          to_token: { id: def.payoutToken, ...PAYMENT_TOKENS[def.payoutToken] },
+        };
+      }),
       // Token daily rewards are currently paid in (see DAILY_PAYOUT_TOKEN_ID).
       reward_token: { id: DAILY_PAYOUT_TOKEN_ID, ...PAYMENT_TOKENS[DAILY_PAYOUT_TOKEN_ID] },
     })
@@ -59,13 +81,14 @@ export const convertRoutes = new Hono<AuthEnv>()
   .use(authMiddleware)
 
   // POST /convert/request — quote + signed deposit params
+  // Body: { deposit_type, amount } — amount is human-readable, in the "from" token.
   .post(
     '/request',
     validator('json', (value, c) => {
       const result = z
         .object({
-          payment_token: z.number().int(),
-          amount_usd: z.string().regex(/^\d{1,6}(\.\d{1,6})?$/, 'Invalid amount'),
+          deposit_type: z.string(),
+          amount: z.string().regex(/^\d{1,9}(\.\d{1,6})?$/, 'Invalid amount'),
         })
         .safeParse(value);
       if (!result.success) {
@@ -75,17 +98,21 @@ export const convertRoutes = new Hono<AuthEnv>()
     }),
     async (c) => {
       const { user_id, address } = c.var.user;
-      const { payment_token, amount_usd } = c.req.valid('json');
+      const { deposit_type, amount: amountHuman } = c.req.valid('json');
 
-      // Converting into G$: payment_token picks usdt_to_gd / usdc_to_gd / usdm_to_gd.
-      const depositType = findConversionType(payment_token, GD_TOKEN_ID);
-      if (depositType === null) {
-        return c.json({ error: 'Unsupported payment token' }, 400);
+      if (!isDepositType(deposit_type)) {
+        return c.json({ error: 'Unsupported conversion' }, 400);
       }
+      const depositType = deposit_type;
       const { depositToken } = DEPOSIT_TYPES[depositType];
+      const token = PAYMENT_TOKENS[depositToken];
+      const amount = parseUnits(amountHuman, token.decimals);
 
-      const usdWei = parseUnits(amount_usd, 18);
-      if (usdWei < minUsdWei || usdWei > maxUsdWei) {
+      const quote = quoteConversion(depositType, amount);
+      if (quote === null) {
+        return c.json({ error: 'Unsupported conversion' }, 400);
+      }
+      if (quote.usdWei < minUsdWei || quote.usdWei > maxUsdWei || quote.payoutAmount === 0n) {
         return c.json(
           { error: `Amount must be between $${CONVERT_MIN_USD} and $${CONVERT_MAX_USD}` },
           400
@@ -95,10 +122,6 @@ export const convertRoutes = new Hono<AuthEnv>()
       if ((await countRecentDeposits(user_id)) >= MAX_DEPOSITS_PER_HOUR) {
         return c.json({ error: 'Too many conversion requests. Please try again later.' }, 429);
       }
-
-      const token = PAYMENT_TOKENS[depositToken];
-      const amount = parseUnits(amount_usd, token.decimals);
-      const quotedPayoutAmount = stableToGdWei(amount, token.decimals);
 
       const seed = await getBlockfallSeed();
       const actionIdBigInt = randomActionId();
@@ -119,7 +142,7 @@ export const convertRoutes = new Hono<AuthEnv>()
         actionId,
         paymentToken: depositToken,
         amount: amount.toString(),
-        quotedPayoutAmount: quotedPayoutAmount.toString(),
+        quotedPayoutAmount: quote.payoutAmount.toString(),
         signature,
         expiresAt,
       });
@@ -130,7 +153,7 @@ export const convertRoutes = new Hono<AuthEnv>()
         payment_token: depositToken,
         token_address: token.address,
         amount: amount.toString(),
-        quoted_payout_amount: quotedPayoutAmount.toString(),
+        quoted_payout_amount: quote.payoutAmount.toString(),
         signature,
         expires_at: expiresAt.toISOString(),
       });

@@ -138,7 +138,7 @@ CREATE TABLE user_claims (
 CREATE TABLE user_deposits (
     deposit_id            BIGINT      DEFAULT generate_id() PRIMARY KEY, -- has created_at in it
     user_id               BIGINT      NOT NULL REFERENCES users(user_id),
-    deposit_type          TEXT        NOT NULL CHECK (deposit_type IN ('usdt_to_gd', 'usdc_to_gd', 'usdm_to_gd')),
+    deposit_type          TEXT        NOT NULL CHECK (deposit_type IN ('usdt_to_gd', 'usdc_to_gd', 'usdm_to_gd', 'gd_to_usdt', 'gd_to_usdc', 'gd_to_usdm')),
     action_id             TEXT        NOT NULL UNIQUE,  -- unique uint256 as hex string
     payment_token         SMALLINT    NOT NULL,         -- token deposited: 1=USDT, 2=USDC, 3=USDm, 4=G$
     amount                NUMERIC     NOT NULL CHECK (amount > 0),  -- deposited token, smallest unit

@@ -111,8 +111,9 @@ export async function fetchTopRankedPlayers(
 }
 
 /**
- * Sum of `revenue` from user_transactions with tx_time inside the tournament
- * day's UTC window.
+ * Sum of `revenue` (USD) from user_transactions with tx_time inside the
+ * tournament day's UTC window. Only purchases set revenue; deposits and claims
+ * are stored with revenue = 0, so they never count.
  */
 export async function fetchDayRevenue(tx: Sql, tournamentDate: string): Promise<string> {
   const rows = await tx<{ revenue: string }[]>`

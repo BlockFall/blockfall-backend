@@ -59,7 +59,7 @@ export const PAYMENT_TOKENS = {
 
 export type PaymentTokenId = keyof typeof PAYMENT_TOKENS;
 
-// Stablecoins a user can convert into G$ (deposit side of /convert).
+// Stablecoins that can be converted to and from G$.
 export const STABLE_TOKEN_IDS = [1, 2, 3] as const;
 export type StableTokenId = (typeof STABLE_TOKEN_IDS)[number];
 
@@ -80,6 +80,9 @@ export const DEPOSIT_TYPES = {
   usdt_to_gd: { depositToken: 1, payoutToken: GD_TOKEN_ID },
   usdc_to_gd: { depositToken: 2, payoutToken: GD_TOKEN_ID },
   usdm_to_gd: { depositToken: 3, payoutToken: GD_TOKEN_ID },
+  gd_to_usdt: { depositToken: GD_TOKEN_ID, payoutToken: 1 },
+  gd_to_usdc: { depositToken: GD_TOKEN_ID, payoutToken: 2 },
+  gd_to_usdm: { depositToken: GD_TOKEN_ID, payoutToken: 3 },
 } as const satisfies Record<string, DepositTypeDef>;
 
 export type DepositType = keyof typeof DEPOSIT_TYPES;
@@ -88,13 +91,22 @@ export type DepositType = keyof typeof DEPOSIT_TYPES;
 // G$ economy
 // ---------------------------------------------------------------------------
 
-// Fixed exchange rate: how many G$ one US dollar buys. Used for stablecoin →
-// G$ conversions, for G$ item prices (USD price × rate, see setup-game.ts in
-// the contracts repo) and for normalising G$ revenue back to USD.
-// Changing this requires re-running setPrice for the G$ item prices.
-export const GD_PER_USD = 8500n;
+// Fixed rates, in G$ per 1 USD. Stablecoins count as exactly 1 USD.
 
-// Per-conversion limits, in human-readable USD.
+// Item prices: G$ item price = USD price × this (static on-chain prices, see
+// setup-game.ts in the contracts repo: 1 energy = 100 G$, 10 = 700 G$, …).
+// Also used to turn G$ purchases back into USD revenue.
+export const GD_PER_USD_ITEM = 10_000n;
+
+// Buying G$ (stablecoin → G$ conversions): $1 = 8,500 G$. Also used to turn the
+// USD daily reward pool into G$.
+export const GD_PER_USD_BUY = 8_500n;
+
+// Selling G$ (G$ → stablecoin conversions): 9,000 G$ = $1.
+export const GD_PER_USD_SELL = 9_000n;
+
+// Per-conversion limits, in human-readable USD (both directions; for G$ →
+// stablecoin the USD value is the stablecoin received).
 export const CONVERT_MIN_USD = '0.10';
 export const CONVERT_MAX_USD = '20';
 
@@ -109,21 +121,19 @@ export const DEPOSIT_TTL_MS = 5 * 60 * 1000;
 
 // Token used for daily reward payouts. Matches keys in PAYMENT_TOKENS.
 //
-// Rewards can be paid in only one token at a time, so this is the single
-// switch between the old stablecoin version and the G$ version:
-//   1 (USDT)        — while the stablecoin frontend is still live (current)
-//   GD_TOKEN_ID (4) — once everyone is on the G$ frontend
-// Buying (stablecoin or G$) and G$ conversions work the same either way.
+// Rewards can be paid in only one token at a time:
+//   GD_TOKEN_ID (4) — current
+//   1 (USDT)        — the old stablecoin setup
 // The value is exposed to the frontend via GET /convert/config (reward_token),
 // so the app's texts follow this switch automatically. Payouts already
 // created keep the token they were signed with.
-export const DAILY_PAYOUT_TOKEN_ID: PaymentTokenId = 1;
+export const DAILY_PAYOUT_TOKEN_ID: PaymentTokenId = GD_TOKEN_ID;
 
 // Minimum total revenue (revenue + inherited_revenue), in USD, required to
-// trigger a payout. Revenue is always stored in USD (G$ purchases are
-// normalised with GD_PER_USD); the pool is converted to DAILY_PAYOUT_TOKEN_ID
-// when paid out. If total is below this, the day's revenue rolls over to the
-// next day.
+// trigger a payout. Only purchases count as revenue; it is stored in USD
+// (G$ purchases ÷ GD_PER_USD_ITEM). The pool is converted to the payout token
+// when paid out (G$: × GD_PER_USD_BUY). If total is below this, the day's
+// revenue rolls over to the next day.
 export const MIN_PAYOUT_THRESHOLD_USD = '0.5';
 
 // Mystery box prize selected as next item from 40 randomized prizes in a batch (mystery_box_prizes)

@@ -4,7 +4,6 @@ import {
   type DepositType,
   type DepositTypeDef,
   PAYMENT_TOKENS,
-  type PaymentTokenId,
 } from './constants.ts';
 import { confirmDeposit, type DepositRow } from './db/deposits.ts';
 import { getBlockfallSeed } from './utils/celo-rpc-reader.ts';
@@ -16,18 +15,14 @@ export function isDepositType(value: string): value is DepositType {
   return Object.hasOwn(DEPOSIT_TYPES, value);
 }
 
-/** The deposit type that converts `depositToken` into `payoutToken`, if any. */
-export function findConversionType(
-  depositToken: number,
-  payoutToken: PaymentTokenId
-): DepositType | null {
-  for (const [type, def] of Object.entries(DEPOSIT_TYPES) as [string, DepositTypeDef][]) {
-    if (def.depositToken === depositToken && def.payoutToken === payoutToken) {
-      return type as DepositType;
-    }
-  }
-  return null;
-}
+type ConversionType = {
+  [K in DepositType]: (typeof DEPOSIT_TYPES)[K]['payoutToken'] extends null ? never : K;
+}[DepositType];
+
+/** Deposit types that convert one token into another (have a payout). */
+export const CONVERSION_TYPES = (Object.keys(DEPOSIT_TYPES) as DepositType[]).filter(
+  (type): type is ConversionType => (DEPOSIT_TYPES[type] as DepositTypeDef).payoutToken !== null
+);
 
 /**
  * Records a confirmed on-chain Deposited event and, when the deposit type has

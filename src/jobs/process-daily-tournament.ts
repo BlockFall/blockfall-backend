@@ -27,7 +27,7 @@ export const PROCESS_TOURNAMENT_INTERVAL_MS = 10 * 60 * 1000;
 const PERCENTAGE_SCALE = 1000n;
 
 // Revenue is stored in USD (NUMERIC). We do the arithmetic in 18-decimal
-// fixed point so G$-derived revenue (USD = G$ / GD_PER_USD) keeps precision.
+// fixed point so G$-derived revenue (USD = G$ / GD_PER_USD_ITEM) keeps precision.
 const USD_DECIMALS = 18;
 
 const payoutToken = PAYMENT_TOKENS[DAILY_PAYOUT_TOKEN_ID];
