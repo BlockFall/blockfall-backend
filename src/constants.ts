@@ -105,9 +105,9 @@ export const GD_PER_USD_BUY = 8_500n;
 // Selling G$ (G$ → stablecoin conversions): 9,000 G$ = $1.
 export const GD_PER_USD_SELL = 9_000n;
 
-// Per-conversion limits, in human-readable USD (both directions; for G$ →
-// stablecoin the USD value is the stablecoin received).
-export const CONVERT_MIN_USD = '0.10';
+// Per-conversion maximum, in human-readable USD (both directions; for G$ →
+// stablecoin the USD value is the stablecoin received). There is no minimum:
+// any amount works as long as both sides are greater than 0.
 export const CONVERT_MAX_USD = '20';
 
 // How long a deposit request is valid. The frontend must not submit the

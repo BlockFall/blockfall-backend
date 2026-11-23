@@ -56,17 +56,6 @@ export async function insertDeposit(params: {
   return rows[0]!;
 }
 
-/** Number of deposit requests the user made in the last hour (abuse guard). */
-export async function countRecentDeposits(userId: string): Promise<number> {
-  const rows = await sql<{ count: string }[]>`
-    SELECT COUNT(*)::text AS count
-    FROM   user_deposits
-    WHERE  user_id = ${userId}
-      AND  deposit_id >= generate_id_at_det(now() - INTERVAL '1 hour')
-  `;
-  return Number(rows[0]?.count ?? 0);
-}
-
 export async function findDepositByActionId(actionId: string): Promise<DepositRow | null> {
   const rows = await sql<DepositRow[]>`
     SELECT d.deposit_id, d.user_id, d.deposit_type, d.action_id, d.payment_token,

@@ -6,7 +6,6 @@ import blockFallGameAbi from '../../abis/blockfall-game.abi.ts';
 import {
   BLOCKFALL_GAME_ADDRESS,
   CONVERT_MAX_USD,
-  CONVERT_MIN_USD,
   DAILY_PAYOUT_TOKEN_ID,
   DEPOSIT_TTL_MS,
   DEPOSIT_TYPES,
@@ -18,7 +17,6 @@ import {
   STABLE_TOKEN_IDS,
 } from '../../constants.ts';
 import {
-  countRecentDeposits,
   DepositAlreadyConfirmedError,
   findDepositByActionId,
   getDepositPayout,
@@ -35,10 +33,7 @@ import { quoteConversion } from '../../utils/pricing.ts';
 import { getSigner, randomActionId, signDeposit } from '../../utils/signer.ts';
 import { authMiddleware, type AuthEnv } from '../middleware/auth.ts';
 
-const MAX_DEPOSITS_PER_HOUR = 20;
-
 // USD amounts are compared in 18-decimal fixed point.
-const minUsdWei = parseUnits(CONVERT_MIN_USD, 18);
 const maxUsdWei = parseUnits(CONVERT_MAX_USD, 18);
 
 /**
@@ -61,7 +56,6 @@ export const convertRoutes = new Hono<AuthEnv>()
         buy: GD_PER_USD_BUY.toString(),
         sell: GD_PER_USD_SELL.toString(),
       },
-      min_usd: CONVERT_MIN_USD,
       max_usd: CONVERT_MAX_USD,
       gd_token: { id: GD_TOKEN_ID, ...PAYMENT_TOKENS[GD_TOKEN_ID] },
       stable_tokens: STABLE_TOKEN_IDS.map((id) => ({ id, ...PAYMENT_TOKENS[id] })),
@@ -112,15 +106,13 @@ export const convertRoutes = new Hono<AuthEnv>()
       if (quote === null) {
         return c.json({ error: 'Unsupported conversion' }, 400);
       }
-      if (quote.usdWei < minUsdWei || quote.usdWei > maxUsdWei || quote.payoutAmount === 0n) {
-        return c.json(
-          { error: `Amount must be between $${CONVERT_MIN_USD} and $${CONVERT_MAX_USD}` },
-          400
-        );
+      // No minimum, but both sides must be greater than 0 (tiny G$ amounts can
+      // round down to 0 stablecoin).
+      if (amount === 0n || quote.payoutAmount === 0n) {
+        return c.json({ error: 'Amount is too small' }, 400);
       }
-
-      if ((await countRecentDeposits(user_id)) >= MAX_DEPOSITS_PER_HOUR) {
-        return c.json({ error: 'Too many conversion requests. Please try again later.' }, 429);
+      if (quote.usdWei > maxUsdWei) {
+        return c.json({ error: `Maximum is $${CONVERT_MAX_USD} per conversion` }, 400);
       }
 
       const seed = await getBlockfallSeed();
