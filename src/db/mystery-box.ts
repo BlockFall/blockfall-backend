@@ -1,9 +1,15 @@
 import type postgres from 'postgres';
+import { parseUnits, toHex } from 'viem';
 import {
   ENERGY_BY_ITEM_TYPE,
+  GD_PRIZE_BY_ITEM_TYPE,
+  GD_TOKEN_ID,
   MYSTERY_BOX_ITEM_TYPE,
   MYSTERY_BOX_PRIZES,
+  PAYMENT_TOKENS,
 } from '../constants.ts';
+import { getBlockfallSeed } from '../utils/celo-rpc-reader.ts';
+import { getSigner, randomActionId, signClaim } from '../utils/signer.ts';
 import { sql, withTransaction } from './index.ts';
 
 // ---------------------------------------------------------------------------
@@ -18,8 +24,19 @@ export type OpenMysteryBoxResult =
       // user_items row, they're credited directly to user_numbers.energy.
       prize_user_item_id: string | null;
       energy_granted: number | null;
+      // Set when the prize is G$ — the signed payout the user claims on-chain.
+      gd_payout: MysteryBoxPayout | null;
     }
   | { success: false; reason: 'not_found_or_already_opened' };
+
+export interface MysteryBoxPayout {
+  payout_id: string;
+  payout_type: 'mystery_box';
+  action_id: string;
+  amount: string;
+  payment_token: number;
+  signature: string;
+}
 
 // Stable advisory-lock key used to serialize batch generation across
 // concurrent openers. Any int8-fitting constant works.
@@ -29,21 +46,29 @@ const PRIZE_BATCH_LOCK_KEY = 0x6d795f626f78; // ascii "my_box"
  * Opens a mystery box owned by `userId`. Transactionally:
  *   1. Verifies the box exists, belongs to the user, and hasn't been used.
  *   2. Picks the lowest-id unused mystery_box_prizes row, generating a fresh
- *      randomized batch of 40 if the pool is empty.
+ *      randomized batch if the pool is empty.
  *   3. Inserts user_item_usages for the box (marks it as used).
  *   4. Inserts mystery_box_given_items linking the prize to that usage.
- *   5. Inserts a user_items row for the prize (acquisition_type='mystery_box',
- *      source_mystery_box_id = the box). If the prize is an energy package the
- *      energy is issued immediately and the prize item is auto-marked as used.
+ *   5. Grants the prize:
+ *      - energy package: energy is issued immediately (no inventory row)
+ *      - G$ prize: a signed 'mystery_box' user_payouts row (source_mystery_box_id
+ *        = the box) that the user claims on-chain; if the claim never happens it
+ *        stays in GET /user pending_claims
+ *      - anything else (boosters): a user_items row (acquisition_type='mystery_box')
  */
 export async function openMysteryBox(
   userId: string,
   mysteryBoxItemId: string
 ): Promise<OpenMysteryBoxResult> {
+  // SEED is cached after the first call; fetching it here keeps the RPC call
+  // out of the transaction in case a G$ prize has to be signed.
+  const seed = await getBlockfallSeed();
+
   return withTransaction<OpenMysteryBoxResult>(async (tx) => {
-    const boxRows = await tx<{ item_id: string }[]>`
-      SELECT ui.item_id
+    const boxRows = await tx<{ item_id: string; address: string }[]>`
+      SELECT ui.item_id, usr.address
       FROM   user_items ui
+      JOIN   users usr ON usr.user_id = ui.user_id
       WHERE  ui.item_id   = ${mysteryBoxItemId}
         AND  ui.user_id   = ${userId}
         AND  ui.item_type = ${MYSTERY_BOX_ITEM_TYPE}
@@ -52,7 +77,8 @@ export async function openMysteryBox(
         )
       FOR UPDATE OF ui
     `;
-    if (boxRows.length === 0) {
+    const box = boxRows[0];
+    if (!box) {
       return { success: false, reason: 'not_found_or_already_opened' };
     }
 
@@ -72,8 +98,10 @@ export async function openMysteryBox(
     `;
 
     const energyAmount = ENERGY_BY_ITEM_TYPE[prize.item_type];
+    const gdPrize = GD_PRIZE_BY_ITEM_TYPE[prize.item_type];
     let energyGranted: number | null = null;
     let prizeItemId: string | null = null;
+    let gdPayout: MysteryBoxPayout | null = null;
 
     if (energyAmount) {
       // Energy prizes are credited directly — no inventory row.
@@ -88,8 +116,39 @@ export async function openMysteryBox(
                updated_at = now()
         WHERE  user_id = ${userId}
       `;
+    } else if (gdPrize) {
+      // G$ prize — a signed payout the user claims on-chain (the claim tx is
+      // recorded by /user_claims/submit or the Claimed sync job).
+      const gdToken = PAYMENT_TOKENS[GD_TOKEN_ID];
+      const amountWei = parseUnits(gdPrize, gdToken.decimals);
+      const actionIdBigInt = randomActionId();
+      const actionId = toHex(actionIdBigInt);
+      const signature = await signClaim(
+        getSigner(),
+        seed,
+        actionIdBigInt,
+        box.address,
+        gdToken.address,
+        amountWei
+      );
+      const payoutRows = await tx<{ payout_id: string }[]>`
+        INSERT INTO user_payouts
+          (user_id, payout_type, action_id, amount, payment_token, signature, source_mystery_box_id)
+        VALUES (${userId}, 'mystery_box', ${actionId}, ${amountWei.toString()}, ${GD_TOKEN_ID},
+                ${signature}, ${mysteryBoxItemId})
+        RETURNING payout_id
+      `;
+      gdPayout = {
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        payout_id: payoutRows[0]!.payout_id,
+        payout_type: 'mystery_box',
+        action_id: actionId,
+        amount: amountWei.toString(),
+        payment_token: GD_TOKEN_ID,
+        signature,
+      };
     } else {
-      // Booster (or any non-energy prize) — add to inventory for later use.
+      // Booster (or any other prize) — add to inventory for later use.
       const prizeItemRows = await tx<{ item_id: string }[]>`
         INSERT INTO user_items (user_id, item_type, acquisition_type, source_mystery_box_id)
         VALUES (${userId}, ${prize.item_type}, 'mystery_box', ${mysteryBoxItemId})
@@ -104,6 +163,7 @@ export async function openMysteryBox(
       prize_item_type: prize.item_type,
       prize_user_item_id: prizeItemId,
       energy_granted: energyGranted,
+      gd_payout: gdPayout,
     };
   });
 }

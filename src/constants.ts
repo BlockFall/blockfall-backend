@@ -12,6 +12,7 @@ export const rpcUrls = [
 // 1-100 is reserved for energy packages
 // 101-200 is reserved for mystery boxes
 // 201-300 is for boosts
+// 301-400 is for G$ prizes (mystery box only, paid out as a claimable payout)
 // ---------------------------------------------------------------------------
 
 export const ENERGY_BY_ITEM_TYPE: Record<number, number> = {
@@ -37,6 +38,15 @@ export const BOOST_INFO_BY_ITEM_TYPE: Record<
   203: { multiplier: 125, durationMinutes: 360 },
   204: { multiplier: 150, durationMinutes: 60 },
   205: { multiplier: 150, durationMinutes: 180 },
+};
+
+// G$ mystery-box prizes: item type → human-readable G$ amount. Opening a box
+// that yields one of these creates a signed 'mystery_box' user_payouts row the
+// user claims on-chain (no user_items row).
+export const GD_PRIZE_BY_ITEM_TYPE: Record<number, string> = {
+  301: '25',
+  302: '50',
+  303: '100',
 };
 
 // ---------------------------------------------------------------------------
@@ -136,8 +146,9 @@ export const DAILY_PAYOUT_TOKEN_ID: PaymentTokenId = GD_TOKEN_ID;
 // revenue rolls over to the next day.
 export const MIN_PAYOUT_THRESHOLD_USD = '0.5';
 
-// Mystery box prize selected as next item from 40 randomized prizes in a batch (mystery_box_prizes)
-// If there is no more items to give, It should create 40 new items according to count and randomize them.
+// Mystery box prize selected as next item from a randomized batch (mystery_box_prizes).
+// If there are no more items to give, a new batch is created from these counts
+// (currently 60 prizes) and shuffled.
 // Record<itemId, { countInBatch: number }>
 export const MYSTERY_BOX_PRIZES = {
   5: { countInBatch: 5 }, // 5 energy
@@ -149,4 +160,7 @@ export const MYSTERY_BOX_PRIZES = {
   203: { countInBatch: 5 }, // 1.25x Boost (6 Hour)
   204: { countInBatch: 6 }, // 1.5x Boost (1 Hour)
   205: { countInBatch: 4 }, // 1.5x Boost (3 Hour)
+  301: { countInBatch: 10 }, // 25 G$
+  302: { countInBatch: 6 }, // 50 G$
+  303: { countInBatch: 4 }, // 100 G$
 };

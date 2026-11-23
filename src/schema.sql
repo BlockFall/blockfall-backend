@@ -115,12 +115,13 @@ CREATE TABLE user_item_usages (
 CREATE TABLE user_payouts (
     payout_id            BIGINT      DEFAULT generate_id() PRIMARY KEY,
     user_id              BIGINT      NOT NULL REFERENCES users(user_id),
-    payout_type          TEXT        NOT NULL CHECK (payout_type IN ('daily_reward', 'conversion')),
+    payout_type          TEXT        NOT NULL CHECK (payout_type IN ('daily_reward', 'conversion', 'mystery_box')),
     action_id            TEXT        NOT NULL UNIQUE,  -- unique uint256 as hex string
     amount               NUMERIC     NOT NULL,
     payment_token        SMALLINT    NOT NULL, -- 1=USDT, 2=USDC, 3=USDm, 4=G$
     signature            TEXT        NOT NULL,
-    daily_tournament_id  BIGINT      REFERENCES daily_tournaments(daily_tournament_id) -- for daily rewards
+    daily_tournament_id  BIGINT      REFERENCES daily_tournaments(daily_tournament_id), -- for daily rewards
+    source_mystery_box_id BIGINT     UNIQUE REFERENCES user_items(item_id) -- for mystery box G$ prizes (the opened box)
 );
 
 -- User claims (no-update) (one-to-one with payouts, enforced by unique FK)

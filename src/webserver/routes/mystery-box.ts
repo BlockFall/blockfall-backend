@@ -34,6 +34,8 @@ export const mysteryBoxRoutes = new Hono<AuthEnv>()
         prize_item_type: result.prize_item_type,
         prize_user_item_id: result.prize_user_item_id,
         energy_granted: result.energy_granted,
+        // G$ prizes: signed payout to claim right away (also in pending_claims).
+        gd_payout: result.gd_payout,
       });
     }
   );
