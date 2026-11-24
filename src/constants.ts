@@ -164,3 +164,10 @@ export const MYSTERY_BOX_PRIZES = {
   302: { countInBatch: 6 }, // 50 G$
   303: { countInBatch: 4 }, // 100 G$
 };
+
+// ---------------------------------------------------------------------------
+// Public stats (GET /stats)
+// ---------------------------------------------------------------------------
+
+// G$ integration start day (UTC). All dashboard stats are counted from here.
+export const STATS_START_DATE = '2026-11-22';
