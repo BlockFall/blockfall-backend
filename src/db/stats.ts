@@ -17,6 +17,8 @@ import { sql } from './index.ts';
 //                     + spent   (G$ paid for in-game items)
 //                     + sold    (confirmed G$ deposits converted to stablecoins)
 //                     Unclaimed payouts and unconfirmed deposits are not counted.
+//   users_24h       – distinct non-banned users active in the last 24 hours
+//                     (rolling, not a calendar day)
 //   retention       – weeks are 7-day blocks starting at STATS_START_DATE.
 //                     Share of users active in the week before the latest
 //                     complete week who were also active in the latest one.
@@ -30,6 +32,8 @@ export interface GameStats {
   since: string;
   /** Since `since`, including today so far. */
   totals: { users: number; tx: number; gd_circulation: number };
+  /** Active users in the last 24 hours (rolling). */
+  users_24h: number;
   /** Complete days only: `since` … yesterday, oldest first. */
   days: string[];
   dau: number[];
@@ -96,7 +100,8 @@ export async function fetchGameStats(): Promise<GameStats> {
   const latestWeek = completeWeeks >= 2 ? addDays(start, (completeWeeks - 1) * 7) : null;
   const prevWeek = latestWeek ? addDays(latestWeek, -7) : null;
 
-  const [dauRows, txRows, gdRows, userRows, retRows] = await Promise.all([
+  const since24h = new Date(Date.now() - DAY_MS);
+  const [dauRows, txRows, gdRows, userRows, users24hRows, retRows] = await Promise.all([
     sql<DayRow[]>`
       SELECT day::text, COUNT(*)::int AS value
       FROM   (${activitySince(start)}) act
@@ -147,6 +152,17 @@ export async function fetchGameStats(): Promise<GameStats> {
     sql<{ users: number }[]>`
       SELECT COUNT(DISTINCT user_id)::int AS users FROM (${activitySince(start)}) act
     `,
+    sql<{ users: number }[]>`
+      SELECT COUNT(DISTINCT a.user_id)::int AS users
+      FROM (
+        SELECT user_id FROM game_plays WHERE game_play_id >= generate_id_at_det(${since24h})
+        UNION ALL
+        SELECT user_id FROM daily_checkins WHERE check_in_id >= generate_id_at_det(${since24h})
+        UNION ALL
+        SELECT user_id FROM user_transactions WHERE tx_time >= ${since24h}
+      ) a
+      WHERE ${notBanned(sql`a.user_id`)}
+    `,
     latestWeek && prevWeek
       ? sql<{ previous_week_users: number; retained_users: number }[]>`
           SELECT COUNT(*) FILTER (WHERE in_prev)::int               AS previous_week_users,
@@ -176,6 +192,7 @@ export async function fetchGameStats(): Promise<GameStats> {
     game: 'blockfall',
     generated_at: new Date().toISOString(),
     since: STATS_START_DATE,
+    users_24h: users24hRows[0]?.users ?? 0,
     totals: {
       users: userRows[0]?.users ?? 0,
       tx: total(txRows),
