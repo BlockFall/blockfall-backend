@@ -11,11 +11,12 @@ import { sql } from './index.ts';
 //                     an on-chain transaction that day
 //   tx              – on-chain transactions recorded in user_transactions
 //                     (purchases, claims, deposits)
-//   G$ circulation  – all G$ moved through the game:
-//                       earned  (daily tournament rewards, mystery box G$ prizes)
-//                     + bought  (G$ paid out for confirmed stablecoin deposits)
+//   G$ circulation  – G$ that actually moved on-chain, dated by the tx:
+//                       claimed (G$ payouts claimed: daily rewards, mystery box
+//                                prizes, stablecoin → G$ conversions)
 //                     + spent   (G$ paid for in-game items)
 //                     + sold    (confirmed G$ deposits converted to stablecoins)
+//                     Unclaimed payouts and unconfirmed deposits are not counted.
 //   retention       – weeks are 7-day blocks starting at STATS_START_DATE.
 //                     Share of users active in the week before the latest
 //                     complete week who were also active in the latest one.
@@ -110,28 +111,28 @@ export async function fetchGameStats(): Promise<GameStats> {
     sql<DayRow[]>`
       SELECT day::text, (SUM(amount) / 1e18)::float8 AS value
       FROM (
-        -- earned
-        SELECT (date_from_id(payout_id) AT TIME ZONE 'UTC')::date AS day, amount
-        FROM   user_payouts
-        WHERE  payout_id >= generate_id_at_det(${start})
-          AND  payment_token = ${GD_TOKEN_ID}
-          AND  payout_type IN ('daily_reward', 'mystery_box')
-        UNION ALL
-        -- spent on items
-        SELECT (tx_time AT TIME ZONE 'UTC')::date, (event_params->>'price')::numeric
-        FROM   user_transactions
-        WHERE  tx_time >= ${start}
-          AND  event_params ? 'itemTypeId'
-          AND  lower(event_params->>'paymentToken') = ${gdAddress}
-        UNION ALL
-        -- bought with stablecoins (G$ paid out)
-        SELECT (ut.tx_time AT TIME ZONE 'UTC')::date, p.amount
-        FROM   user_deposit_confirmations dc
-        JOIN   user_payouts p ON p.payout_id = dc.payout_id
-        JOIN   user_transactions ut ON ut.transaction_id = dc.deposit_transaction_id
+        -- claimed G$ payouts (rewards, mystery box prizes, conversions)
+        SELECT (ut.tx_time AT TIME ZONE 'UTC')::date AS day, p.amount
+        FROM   user_claims c
+        JOIN   user_payouts p ON p.payout_id = c.payout_id
+        JOIN   user_transactions ut ON ut.transaction_id = c.claim_transaction_id
         WHERE  ut.tx_time >= ${start}
-          AND  p.payout_type = 'conversion'
           AND  p.payment_token = ${GD_TOKEN_ID}
+        UNION ALL
+        -- spent on items. event_params is written with JSON.stringify, so it is
+        -- stored as a JSON string holding the object; unwrap it either way.
+        SELECT day, (ep->>'price')::numeric
+        FROM (
+          SELECT (tx_time AT TIME ZONE 'UTC')::date AS day,
+                 CASE WHEN jsonb_typeof(event_params) = 'string'
+                      THEN (event_params #>> '{}')::jsonb
+                      ELSE event_params
+                 END AS ep
+          FROM   user_transactions
+          WHERE  tx_time >= ${start}
+        ) t
+        WHERE  ep ? 'itemTypeId'
+          AND  lower(ep->>'paymentToken') = ${gdAddress}
         UNION ALL
         -- sold for stablecoins (G$ deposited)
         SELECT (ut.tx_time AT TIME ZONE 'UTC')::date, d.amount
