@@ -73,13 +73,14 @@ export async function findDepositByActionId(actionId: string): Promise<DepositRo
 }
 
 /**
- * Finds the unconfirmed deposit request a plain ERC20 transfer pays for: same
- * user, token and amount, created at most a day before the transfer (with a
+ * Finds the unconfirmed deposit request a conversion-pack buy without an
+ * action id pays for: same user, token and amount, created at most a day
+ * before the purchase (with a
  * little slack for clock skew). When several match, the newest one wins: a
  * user who abandoned an earlier request and started a new one is paying for
  * the new one.
  */
-export async function findDepositForTransfer(params: {
+export async function findDepositForPayment(params: {
   userId: string;
   paymentToken: PaymentTokenId;
   amount: bigint;

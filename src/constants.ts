@@ -13,6 +13,7 @@ export const rpcUrls = [
 // 101-200 is reserved for mystery boxes
 // 201-300 is for boosts
 // 301-400 is for G$ prizes (mystery box only, paid out as a claimable payout)
+// 401-500 is for conversion packs (see CONVERSION_PACKS)
 // ---------------------------------------------------------------------------
 
 export const ENERGY_BY_ITEM_TYPE: Record<number, number> = {
@@ -124,6 +125,40 @@ export const CONVERT_MAX_USD = '20';
 // deposit after this (it requests a fresh one instead). The contract cannot
 // enforce it, so a late deposit is still honoured at quoted_payout_amount.
 export const DEPOSIT_TTL_MS = 5 * 60 * 1000;
+
+// Conversion packs: fixed-price items bought with buy() to pay a conversion
+// request (MiniPay blocks deposit() but allows buy()). The ItemBought price
+// must equal the request's amount; the backend then confirms the request like
+// a deposit. Never revenue.
+//   'buy'  packs (401-410): Buy G$, priced in each stablecoin at `amount` USD
+//   'sell' packs (411-420): Sell G$, priced at `amount` G$
+// On-chain prices are set by setup-game.ts in the contracts repo.
+export const CONVERSION_PACKS: Record<number, { side: 'buy' | 'sell'; amount: string }> = {
+  401: { side: 'buy', amount: '0.01' },
+  402: { side: 'buy', amount: '0.03' },
+  403: { side: 'buy', amount: '0.05' },
+  404: { side: 'buy', amount: '0.10' },
+  405: { side: 'buy', amount: '0.20' },
+  406: { side: 'buy', amount: '0.25' },
+  407: { side: 'buy', amount: '0.50' },
+  408: { side: 'buy', amount: '1' },
+  409: { side: 'buy', amount: '2' },
+  410: { side: 'buy', amount: '5' },
+  411: { side: 'sell', amount: '50' },
+  412: { side: 'sell', amount: '100' },
+  413: { side: 'sell', amount: '250' },
+  414: { side: 'sell', amount: '500' },
+  415: { side: 'sell', amount: '1000' },
+  416: { side: 'sell', amount: '2500' },
+  417: { side: 'sell', amount: '5000' },
+  418: { side: 'sell', amount: '10000' },
+  419: { side: 'sell', amount: '25000' },
+  420: { side: 'sell', amount: '50000' },
+};
+
+export function isConversionPack(itemTypeId: number): boolean {
+  return Object.hasOwn(CONVERSION_PACKS, itemTypeId);
+}
 
 // ---------------------------------------------------------------------------
 // Daily tournament payouts

@@ -13,6 +13,7 @@ import {
   GD_PER_USD_ITEM,
   GD_PER_USD_SELL,
   GD_TOKEN_ID,
+  isConversionPack,
   PAYMENT_TOKENS,
   STABLE_TOKEN_IDS,
 } from '../../constants.ts';
@@ -21,7 +22,7 @@ import {
   type DepositRow,
   findDepositByActionId,
   findDepositByTxHash,
-  findDepositForTransfer,
+  findDepositForPayment,
   getDepositPayout,
   insertDeposit,
 } from '../../db/deposits.ts';
@@ -30,9 +31,8 @@ import {
   CONVERSION_TYPES,
   DepositMismatchError,
   type DepositSource,
-  hasGameContractLogs,
   isDepositType,
-  transfersToGame,
+  tokenIdByAddress,
 } from '../../deposits.ts';
 import { getBlock, getBlockfallSeed, getTransactionReceipt } from '../../utils/celo-rpc-reader.ts';
 import { quoteConversion } from '../../utils/pricing.ts';
@@ -47,8 +47,9 @@ const maxUsdWei = parseUnits(CONVERT_MAX_USD, 18);
  * transactions:
  *   1. POST /convert/request → a deposit request (and signed deposit() params);
  *      the user sends the "from" token (stablecoin for *_to_gd, G$ for gd_to_*)
- *      either with deposit() or with a plain ERC20 transfer to the contract
- *      (what the app does: MiniPay only allows whitelisted contract calls)
+ *      with deposit() or by buying a conversion pack priced at that amount
+ *      (what the app does: MiniPay only allows whitelisted contract calls,
+ *      buy() among them)
  *   2. POST /convert/submit  → verifies the deposit and returns the
  *      signed claim() payout in the "to" token (also listed in GET /user
  *      pending_conversions), which the user claims through /user_claims.
@@ -161,9 +162,9 @@ export const convertRoutes = new Hono<AuthEnv>()
   )
 
   // POST /convert/submit — confirm the deposit tx, get the signed claim
-  // Body: { tx_hash, action_id? }. The tx is either a deposit() call or a plain
-  // ERC20 transfer of the requested amount to the game contract; action_id
-  // (from /convert/request) says which request a transfer pays for.
+  // Body: { tx_hash, action_id? }. The tx is a buy() of a conversion pack
+  // priced at the requested amount (what the app does) or a deposit() call;
+  // action_id (from /convert/request) says which request a pack pays for.
   .post(
     '/submit',
     validator('json', (value, c) => {
@@ -212,12 +213,21 @@ export const convertRoutes = new Hono<AuthEnv>()
         eventName: 'Deposited',
         logs: receipt.logs,
       }).find((log) => log.address.toLowerCase() === gameAddress);
+      const packEvent = parseEventLogs({
+        abi: blockFallGameAbi,
+        eventName: 'ItemBought',
+        logs: receipt.logs,
+      }).find(
+        (log) =>
+          log.address.toLowerCase() === gameAddress && isConversionPack(Number(log.args.itemTypeId))
+      );
 
       // Resolve which request this tx pays for, and with what token/amount.
-      let deposit: DepositRow | null = null;
+      let deposit: DepositRow | null;
       let paymentToken: string;
       let amount: bigint;
       let source: DepositSource;
+      let packItemTypeId: number | undefined;
 
       if (depositedEvent) {
         // deposit(actionId, …) call
@@ -228,49 +238,33 @@ export const convertRoutes = new Hono<AuthEnv>()
         paymentToken = depositedEvent.args.paymentToken;
         amount = depositedEvent.args.amount;
         source = 'deposit';
+      } else if (packEvent) {
+        // buy() of a conversion pack: its price is the deposited amount
+        if (packEvent.args.buyer.toLowerCase() !== player) {
+          return c.json({ error: 'Transaction buyer does not match authenticated user' }, 403);
+        }
+        const tokenId = tokenIdByAddress(packEvent.args.paymentToken);
+        if (tokenId === null) {
+          return c.json({ error: 'Unsupported payment token' }, 400);
+        }
+        deposit =
+          action_id !== undefined
+            ? await findDepositByActionId(action_id)
+            : await findDepositForPayment({
+                userId: user_id,
+                paymentToken: tokenId,
+                amount: packEvent.args.price,
+                txTime: await blockTime(receipt.blockNumber),
+              });
+        paymentToken = packEvent.args.paymentToken;
+        amount = packEvent.args.price;
+        source = 'pack';
+        packItemTypeId = Number(packEvent.args.itemTypeId);
       } else {
-        // Plain ERC20 transfer to the game contract. Buys and other contract
-        // calls also move tokens to it, so they never count as a deposit.
-        if (hasGameContractLogs(receipt.logs)) {
-          return c.json({ error: 'Transaction is not a deposit' }, 400);
-        }
-        const transfers = transfersToGame(receipt.logs).filter((t) => t.from === player);
-        if (transfers.length === 0) {
-          return c.json({ error: 'No transfer to the game contract found in transaction' }, 400);
-        }
-
-        let transfer;
-        if (action_id !== undefined) {
-          deposit = await findDepositByActionId(action_id);
-          transfer = deposit
-            ? transfers.find(
-                (t) => t.tokenId === deposit?.payment_token && t.amount === BigInt(deposit.amount)
-              )
-            : undefined;
-          if (deposit && !transfer) {
-            return c.json({ error: 'Transferred token or amount does not match request' }, 400);
-          }
-        } else {
-          const txTime = await blockTime(receipt.blockNumber);
-          for (const t of transfers) {
-            deposit = await findDepositForTransfer({
-              userId: user_id,
-              paymentToken: t.tokenId,
-              amount: t.amount,
-              txTime,
-            });
-            if (deposit) {
-              transfer = t;
-              break;
-            }
-          }
-        }
-        if (!transfer) {
-          return c.json({ error: 'Conversion request not found for transfer' }, 404);
-        }
-        paymentToken = transfer.tokenAddress;
-        amount = transfer.amount;
-        source = 'transfer';
+        return c.json(
+          { error: 'No Deposited or conversion pack ItemBought event in transaction' },
+          400
+        );
       }
 
       if (!deposit) {
@@ -294,6 +288,7 @@ export const convertRoutes = new Hono<AuthEnv>()
           txHash: tx_hash,
           txTime: await blockTime(receipt.blockNumber),
           source,
+          packItemTypeId,
         });
         payoutId = result.payout_id;
       } catch (err) {

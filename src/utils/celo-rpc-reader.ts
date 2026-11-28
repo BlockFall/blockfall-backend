@@ -1,8 +1,8 @@
 import type { Chain, GetTransactionReceiptReturnType } from 'viem';
-import { createPublicClient, erc20Abi, http } from 'viem';
+import { createPublicClient, http } from 'viem';
 import { celo } from 'viem/chains';
 import blockFallGameAbi from '../abis/blockfall-game.abi.ts';
-import { BLOCKFALL_GAME_ADDRESS, PAYMENT_TOKENS, rpcUrls } from '../constants.ts';
+import { BLOCKFALL_GAME_ADDRESS, rpcUrls } from '../constants.ts';
 
 const clients = rpcUrls.map((url: string) =>
   createPublicClient({ chain: celo, transport: http(url) })
@@ -112,31 +112,6 @@ export async function getDepositedLogs(fromBlock: bigint, toBlock: bigint) {
 }
 
 export type DepositedLog = Awaited<ReturnType<typeof getDepositedLogs>>[number];
-
-// Fetches ERC20 Transfer events of the payment tokens (USDT, USDC, USDm, G$)
-// sent to the BlockFallGame contract in the inclusive [fromBlock, toBlock]
-// range. Includes transfers made by buy()/deposit() calls; callers filter those.
-export async function getTransfersToGameLogs(fromBlock: bigint, toBlock: bigint) {
-  const tokenAddresses = Object.values(PAYMENT_TOKENS).map((t) => t.address as `0x${string}`);
-  for (const client of clients) {
-    try {
-      return await client.getContractEvents({
-        address: tokenAddresses,
-        abi: erc20Abi,
-        eventName: 'Transfer',
-        args: { to: BLOCKFALL_GAME_ADDRESS as `0x${string}` },
-        fromBlock,
-        toBlock,
-        strict: true,
-      });
-    } catch {
-      /* try next RPC */
-    }
-  }
-  throw new Error('All RPC URLs failed for getTransfersToGameLogs');
-}
-
-export type TransferToGameLog = Awaited<ReturnType<typeof getTransfersToGameLogs>>[number];
 
 let cachedSeed: `0x${string}` | null = null;
 
