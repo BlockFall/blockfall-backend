@@ -1,4 +1,4 @@
-import { Hono } from 'hono';
+import { type Context, Hono } from 'hono';
 import { validator } from 'hono/validator';
 import { parseEventLogs, parseUnits, toHex } from 'viem';
 import { z } from 'zod';
@@ -18,7 +18,10 @@ import {
 } from '../../constants.ts';
 import {
   DepositAlreadyConfirmedError,
+  type DepositRow,
   findDepositByActionId,
+  findDepositByTxHash,
+  findDepositForTransfer,
   getDepositPayout,
   insertDeposit,
 } from '../../db/deposits.ts';
@@ -26,22 +29,27 @@ import {
   confirmDepositEvent,
   CONVERSION_TYPES,
   DepositMismatchError,
+  type DepositSource,
+  hasGameContractLogs,
   isDepositType,
+  transfersToGame,
 } from '../../deposits.ts';
 import { getBlock, getBlockfallSeed, getTransactionReceipt } from '../../utils/celo-rpc-reader.ts';
 import { quoteConversion } from '../../utils/pricing.ts';
 import { getSigner, randomActionId, signDeposit } from '../../utils/signer.ts';
-import { authMiddleware, type AuthEnv } from '../middleware/auth.ts';
+import { type AuthEnv, authMiddleware } from '../middleware/auth.ts';
 
 // USD amounts are compared in 18-decimal fixed point.
 const maxUsdWei = parseUnits(CONVERT_MAX_USD, 18);
 
 /**
  * Conversions between stablecoins and G$, in both directions. Two on-chain
- * transactions, both signed by the backend:
- *   1. POST /convert/request → signed deposit() params; user deposits the
- *      "from" token (stablecoin for *_to_gd, G$ for gd_to_*)
- *   2. POST /convert/submit  → verifies the Deposited event and returns the
+ * transactions:
+ *   1. POST /convert/request → a deposit request (and signed deposit() params);
+ *      the user sends the "from" token (stablecoin for *_to_gd, G$ for gd_to_*)
+ *      either with deposit() or with a plain ERC20 transfer to the contract
+ *      (what the app does: MiniPay only allows whitelisted contract calls)
+ *   2. POST /convert/submit  → verifies the deposit and returns the
  *      signed claim() payout in the "to" token (also listed in GET /user
  *      pending_conversions), which the user claims through /user_claims.
  * Rates: stablecoin → G$ at GD_PER_USD_BUY, G$ → stablecoin at GD_PER_USD_SELL.
@@ -152,13 +160,20 @@ export const convertRoutes = new Hono<AuthEnv>()
     }
   )
 
-  // POST /convert/submit — confirm the deposit tx, get the signed G$ claim
+  // POST /convert/submit — confirm the deposit tx, get the signed claim
+  // Body: { tx_hash, action_id? }. The tx is either a deposit() call or a plain
+  // ERC20 transfer of the requested amount to the game contract; action_id
+  // (from /convert/request) says which request a transfer pays for.
   .post(
     '/submit',
     validator('json', (value, c) => {
       const result = z
         .object({
           tx_hash: z.string().regex(/^0x[0-9a-fA-F]{64}$/, 'Invalid transaction hash'),
+          action_id: z
+            .string()
+            .regex(/^0x[0-9a-fA-F]{1,64}$/, 'Invalid action id')
+            .optional(),
         })
         .safeParse(value);
       if (!result.success) {
@@ -168,7 +183,8 @@ export const convertRoutes = new Hono<AuthEnv>()
     }),
     async (c) => {
       const { user_id, address } = c.var.user;
-      const { tx_hash } = c.req.valid('json');
+      const { tx_hash, action_id } = c.req.valid('json');
+      const player = address.toLowerCase();
 
       let receipt;
       try {
@@ -181,63 +197,132 @@ export const convertRoutes = new Hono<AuthEnv>()
         return c.json({ error: 'Transaction was not successful' }, 400);
       }
 
-      if (receipt.to?.toLowerCase() !== BLOCKFALL_GAME_ADDRESS.toLowerCase()) {
-        return c.json({ error: 'Transaction is not for the BlockFallGame contract' }, 400);
+      // Idempotent: the sync jobs (or a retry) may already have confirmed it.
+      const alreadyConfirmed = await findDepositByTxHash(tx_hash);
+      if (alreadyConfirmed) {
+        if (alreadyConfirmed.user_id !== user_id) {
+          return c.json({ error: 'Conversion does not belong to authenticated user' }, 403);
+        }
+        return payoutResponse(c, alreadyConfirmed.payout_id);
       }
 
-      const depositedLogs = parseEventLogs({
+      const gameAddress = BLOCKFALL_GAME_ADDRESS.toLowerCase();
+      const depositedEvent = parseEventLogs({
         abi: blockFallGameAbi,
         eventName: 'Deposited',
         logs: receipt.logs,
-      });
-      const event = depositedLogs[0];
-      if (event == null) {
-        return c.json({ error: 'No Deposited event found in transaction' }, 400);
+      }).find((log) => log.address.toLowerCase() === gameAddress);
+
+      // Resolve which request this tx pays for, and with what token/amount.
+      let deposit: DepositRow | null = null;
+      let paymentToken: string;
+      let amount: bigint;
+      let source: DepositSource;
+
+      if (depositedEvent) {
+        // deposit(actionId, …) call
+        if (depositedEvent.args.player.toLowerCase() !== player) {
+          return c.json({ error: 'Transaction player does not match authenticated user' }, 403);
+        }
+        deposit = await findDepositByActionId(toHex(depositedEvent.args.actionId));
+        paymentToken = depositedEvent.args.paymentToken;
+        amount = depositedEvent.args.amount;
+        source = 'deposit';
+      } else {
+        // Plain ERC20 transfer to the game contract. Buys and other contract
+        // calls also move tokens to it, so they never count as a deposit.
+        if (hasGameContractLogs(receipt.logs)) {
+          return c.json({ error: 'Transaction is not a deposit' }, 400);
+        }
+        const transfers = transfersToGame(receipt.logs).filter((t) => t.from === player);
+        if (transfers.length === 0) {
+          return c.json({ error: 'No transfer to the game contract found in transaction' }, 400);
+        }
+
+        let transfer;
+        if (action_id !== undefined) {
+          deposit = await findDepositByActionId(action_id);
+          transfer = deposit
+            ? transfers.find(
+                (t) => t.tokenId === deposit?.payment_token && t.amount === BigInt(deposit.amount)
+              )
+            : undefined;
+          if (deposit && !transfer) {
+            return c.json({ error: 'Transferred token or amount does not match request' }, 400);
+          }
+        } else {
+          const txTime = await blockTime(receipt.blockNumber);
+          for (const t of transfers) {
+            deposit = await findDepositForTransfer({
+              userId: user_id,
+              paymentToken: t.tokenId,
+              amount: t.amount,
+              txTime,
+            });
+            if (deposit) {
+              transfer = t;
+              break;
+            }
+          }
+        }
+        if (!transfer) {
+          return c.json({ error: 'Conversion request not found for transfer' }, 404);
+        }
+        paymentToken = transfer.tokenAddress;
+        amount = transfer.amount;
+        source = 'transfer';
       }
 
-      const player = event.args.player.toLowerCase();
-      if (player !== address.toLowerCase()) {
-        return c.json({ error: 'Transaction player does not match authenticated user' }, 403);
-      }
-
-      const deposit = await findDepositByActionId(toHex(event.args.actionId));
       if (!deposit) {
-        return c.json({ error: 'Conversion request not found for action_id' }, 404);
+        return c.json({ error: 'Conversion request not found' }, 404);
       }
       if (deposit.user_id !== user_id) {
         return c.json({ error: 'Conversion does not belong to authenticated user' }, 403);
       }
+      if (deposit.confirmation_id !== null) {
+        // Confirmed by a different transaction.
+        return c.json({ error: 'Conversion request was already paid' }, 409);
+      }
 
-      // Idempotent: the sync job (or a retry) may already have confirmed it.
-      let payoutId = deposit.payout_id;
-      if (deposit.confirmation_id === null) {
-        const block = await getBlock(receipt.blockNumber);
-        const txTime = new Date(Number(block.timestamp) * 1000);
-        try {
-          const result = await confirmDepositEvent({
-            deposit,
-            player,
-            paymentToken: event.args.paymentToken,
-            amount: event.args.amount,
-            txHash: tx_hash,
-            txTime,
-          });
-          payoutId = result.payout_id;
-        } catch (err) {
-          if (err instanceof DepositMismatchError) {
-            return c.json({ error: err.message }, 400);
-          }
-          if (!(err instanceof DepositAlreadyConfirmedError)) throw err;
-          payoutId = (await findDepositByActionId(deposit.action_id))?.payout_id ?? null;
+      let payoutId: string | null;
+      try {
+        const result = await confirmDepositEvent({
+          deposit,
+          player,
+          paymentToken,
+          amount,
+          txHash: tx_hash,
+          txTime: await blockTime(receipt.blockNumber),
+          source,
+        });
+        payoutId = result.payout_id;
+      } catch (err) {
+        if (err instanceof DepositMismatchError) {
+          return c.json({ error: err.message }, 400);
         }
+        if (!(err instanceof DepositAlreadyConfirmedError)) throw err;
+        // A sync job confirmed it concurrently (possibly against another request).
+        const confirmed = await findDepositByTxHash(tx_hash);
+        if (confirmed?.user_id !== user_id) {
+          return c.json({ error: 'Conversion request was already paid' }, 409);
+        }
+        payoutId = confirmed.payout_id;
       }
 
-      // Conversion deposit types always create a payout with the confirmation.
-      const payout = payoutId ? await getDepositPayout(payoutId) : null;
-      if (!payout) {
-        return c.json({ error: 'Conversion payout not found' }, 500);
-      }
-
-      return c.json({ payout });
+      return payoutResponse(c, payoutId);
     }
   );
+
+async function blockTime(blockNumber: bigint): Promise<Date> {
+  const block = await getBlock(blockNumber);
+  return new Date(Number(block.timestamp) * 1000);
+}
+
+// Conversion deposit types always create a payout with the confirmation.
+async function payoutResponse(c: Context<AuthEnv>, payoutId: string | null) {
+  const payout = payoutId ? await getDepositPayout(payoutId) : null;
+  if (!payout) {
+    return c.json({ error: 'Conversion payout not found' }, 500);
+  }
+  return c.json({ payout });
+}

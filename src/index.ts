@@ -9,6 +9,10 @@ import {
   runSyncItemBoughtJob,
   SYNC_ITEM_BOUGHT_INTERVAL_MS,
 } from './jobs/sync-item-bought-events.ts';
+import {
+  runSyncTransferDepositJob,
+  SYNC_TRANSFER_DEPOSIT_INTERVAL_MS,
+} from './jobs/sync-transfer-deposits.ts';
 import { maintainAsyncJob } from './utils/index.ts';
 import { startWebServer } from './webserver/index.ts';
 
@@ -36,6 +40,13 @@ maintainAsyncJob(runSyncDepositJob, SYNC_DEPOSIT_INTERVAL_MS).catch((err: unknow
   console.error('sync deposit job error:', err);
   process.exit(1);
 });
+
+maintainAsyncJob(runSyncTransferDepositJob, SYNC_TRANSFER_DEPOSIT_INTERVAL_MS).catch(
+  (err: unknown) => {
+    console.error('sync transfer deposit job error:', err);
+    process.exit(1);
+  }
+);
 
 startWebServer().catch((err: unknown) => {
   console.error('webserver error:', err);

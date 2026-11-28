@@ -66,6 +66,7 @@ async function processDepositedLog(
       amount: log.args.amount,
       txHash: log.transactionHash,
       txTime,
+      source: 'deposit',
     });
     console.log(
       `synced Deposited tx ${log.transactionHash} (deposit ${deposit.deposit_id}, ` +
